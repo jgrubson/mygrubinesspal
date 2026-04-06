@@ -1,6 +1,7 @@
 import streamlit as st
 from supabase import create_client
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
+import pandas as pd
 
 # ============================================
 # CONEXÃO SUPABASE
@@ -14,7 +15,7 @@ def get_supabase():
 db = get_supabase()
 
 # ============================================
-# CONFIGURAÇÃO DA PÁGINA
+# CONFIGURAÇÃO
 # ============================================
 st.set_page_config(
     page_title="MyGrubinessPal",
@@ -24,579 +25,567 @@ st.set_page_config(
 )
 
 # ============================================
-# CSS CUSTOMIZADO — MOBILE FIRST
+# CSS — MOBILE FIRST, LIMPO
 # ============================================
 st.markdown("""
 <style>
-    /* Remove padding excessivo */
     .block-container {
-        padding-top: 1rem;
-        padding-bottom: 1rem;
+        padding-top: 0.5rem;
+        padding-bottom: 4rem;
         max-width: 600px;
     }
-    /* Sidebar mais limpa */
-    [data-testid="stSidebar"] {
-        min-width: 200px;
-        max-width: 250px;
-    }
-    /* Esconde menu hamburger e footer */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
-    /* Tabs maiores para toque */
-    .stTabs [data-baseweb="tab"] {
-        padding: 10px 16px;
-        font-size: 14px;
+    header {visibility: hidden;}
+    .card {
+        background: #1A1D23;
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        border: 1px solid #2D3139;
     }
-    /* Botões mais tocáveis */
-    .stButton > button {
-        width: 100%;
-        padding: 0.5rem;
-        margin-bottom: 0.25rem;
+    .card-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: #FAFAFA;
     }
-    /* Checkboxes maiores */
-    .stCheckbox label {
-        font-size: 15px;
-        padding: 4px 0;
+    .card-sub {
+        font-size: 13px;
+        color: #888;
+        margin-top: 4px;
+    }
+    .macro-row {
+        display: flex;
+        gap: 8px;
+        margin: 8px 0 12px 0;
+    }
+    .macro-pill {
+        background: #2D3139;
+        border-radius: 8px;
+        padding: 8px 12px;
+        text-align: center;
+        flex: 1;
+    }
+    .macro-pill .label {
+        font-size: 11px;
+        color: #888;
+        text-transform: uppercase;
+    }
+    .macro-pill .value {
+        font-size: 18px;
+        font-weight: 600;
+        color: #FAFAFA;
+    }
+    .badge-green {
+        background: #1B5E20; color: #81C784;
+        padding: 4px 12px; border-radius: 20px; font-size: 13px; display: inline-block;
+    }
+    .badge-yellow {
+        background: #4E3A00; color: #FFD54F;
+        padding: 4px 12px; border-radius: 20px; font-size: 13px; display: inline-block;
+    }
+    .badge-red {
+        background: #4E0000; color: #E57373;
+        padding: 4px 12px; border-radius: 20px; font-size: 13px; display: inline-block;
+    }
+    .stNumberInput input, .stSelectbox select, .stTextArea textarea {
+        font-size: 16px !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ============================================
-# ESTADO DE SESSÃO
+# ESTADO
 # ============================================
 if "page" not in st.session_state:
     st.session_state.page = "hoje"
+if "selected_date" not in st.session_state:
+    st.session_state.selected_date = date.today()
 
 # ============================================
-# FUNÇÕES AUXILIARES
+# SELETOR DE DATA GLOBAL
 # ============================================
-def get_today():
-    """Retorna data de hoje como string ISO."""
-    return date.today().isoformat()
+def date_selector():
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col1:
+        if st.button("◀", key=f"prev_{st.session_state.page}", use_container_width=True):
+            st.session_state.selected_date -= timedelta(days=1)
+            st.rerun()
+    with col2:
+        new_date = st.date_input(
+            "Data", value=st.session_state.selected_date,
+            label_visibility="collapsed", key=f"dp_{st.session_state.page}"
+        )
+        if new_date != st.session_state.selected_date:
+            st.session_state.selected_date = new_date
+            st.rerun()
+    with col3:
+        if st.button("▶", key=f"next_{st.session_state.page}", use_container_width=True):
+            st.session_state.selected_date += timedelta(days=1)
+            st.rerun()
+    d = st.session_state.selected_date
+    if d == date.today():
+        st.caption("📅 Hoje")
+    elif d == date.today() - timedelta(days=1):
+        st.caption("📅 Ontem")
+    else:
+        dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        st.caption(f"📅 {dias[d.weekday()]}, {d.strftime('%d/%m/%Y')}")
+    return d.isoformat()
 
+# ============================================
+# FUNÇÕES DE DADOS
+# ============================================
 def get_weight_history(days=30):
-    """Busca histórico de peso dos últimos N dias."""
     start = (date.today() - timedelta(days=days)).isoformat()
-    result = db.table("daily_weight") \
-        .select("date, weight_kg") \
-        .gte("date", start) \
-        .order("date") \
-        .execute()
-    return result.data if result.data else []
+    r = db.table("daily_weight").select("date, weight_kg").gte("date", start).order("date").execute()
+    return r.data or []
 
 def get_goals():
-    """Busca metas ativas."""
-    result = db.table("goals") \
-        .select("*") \
-        .eq("active", True) \
-        .execute()
-    return {g["metric"]: g for g in result.data} if result.data else {}
+    r = db.table("goals").select("*").eq("active", True).execute()
+    return {g["metric"]: g for g in r.data} if r.data else {}
 
 def get_checklist_items():
-    """Busca itens do checklist ordenados."""
-    result = db.table("checklist_items") \
-        .select("*") \
-        .eq("active", True) \
-        .order("sort_order") \
-        .execute()
-    return result.data if result.data else []
+    r = db.table("checklist_items").select("*").eq("active", True).order("sort_order").execute()
+    return r.data or []
 
 def get_daily_checklist(target_date):
-    """Busca checklist preenchido de uma data."""
-    result = db.table("checklist_daily") \
-        .select("*") \
-        .eq("date", target_date) \
-        .execute()
-    return {r["item_key"]: r for r in result.data} if result.data else {}
+    r = db.table("checklist_daily").select("*").eq("date", target_date).execute()
+    return {x["item_key"]: x for x in r.data} if r.data else {}
 
 def upsert_checklist(target_date, item_key, done):
-    """Marca/desmarca item do checklist."""
-    db.table("checklist_daily").upsert({
-        "date": target_date,
-        "item_key": item_key,
-        "done": done
-    }, on_conflict="date,item_key").execute()
+    db.table("checklist_daily").upsert(
+        {"date": target_date, "item_key": item_key, "done": done},
+        on_conflict="date,item_key"
+    ).execute()
 
-def upsert_weight(target_date, weight_kg, notes=""):
-    """Registra ou atualiza peso do dia."""
-    db.table("daily_weight").upsert({
-        "date": target_date,
-        "weight_kg": weight_kg,
-        "notes": notes
-    }, on_conflict="date").execute()
+def upsert_weight(target_date, weight_kg):
+    db.table("daily_weight").upsert(
+        {"date": target_date, "weight_kg": weight_kg},
+        on_conflict="date"
+    ).execute()
 
 def get_daily_meals(target_date):
-    """Busca refeições de uma data."""
-    result = db.table("meals") \
-        .select("*") \
-        .eq("date", target_date) \
-        .execute()
-    return result.data if result.data else []
+    r = db.table("meals").select("*").eq("date", target_date).execute()
+    return r.data or []
 
 def get_food_library():
-    """Busca biblioteca de alimentos."""
-    result = db.table("food_library") \
-        .select("*") \
-        .eq("active", True) \
-        .order("name") \
-        .execute()
-    return result.data if result.data else []
+    r = db.table("food_library").select("*").eq("active", True).order("name").execute()
+    return r.data or []
+
+def get_weight_for_date(target_date):
+    r = db.table("daily_weight").select("weight_kg").eq("date", target_date).execute()
+    return float(r.data[0]["weight_kg"]) if r.data else None
+
+def get_sleep_for_date(target_date):
+    r = db.table("sleep_cpap").select("*").eq("date", target_date).execute()
+    return r.data[0] if r.data else {}
+
+# ============================================
+# ALIMENTOS SUGERIDOS POR REFEIÇÃO
+# ============================================
+MEAL_FOOD_MAP = {
+    "cafe": {
+        "sugestoes": ["ovo_cozido", "whey_dose", "suco_verde", "leite_desnatado",
+                      "pao_integral", "banana", "aveia", "iogurte_grego", "cafe_puro", "queijo_branco"],
+        "label": "☕ Café da manhã / Pós-treino"
+    },
+    "almoco": {
+        "sugestoes": ["arroz_branco", "feijao_cozido", "arroz_feijao", "frango_grelhado",
+                      "patinho_moido", "carne_magra", "lombo_suino", "batata_cozida",
+                      "mandioca_cozida", "alface", "rucula", "tomate", "cenoura_crua",
+                      "beterraba", "chuchu", "vagem", "couve_cozida", "azeite",
+                      "agua", "refri_zero", "lentilha"],
+        "label": "🍽️ Almoço"
+    },
+    "lanche": {
+        "sugestoes": ["pao_integral", "whey_dose", "iogurte_grego", "banana",
+                      "queijo_branco", "castanhas", "cafe_puro", "leite_desnatado",
+                      "requeijao_light", "aveia"],
+        "label": "🥪 Lanche da tarde"
+    },
+    "jantar": {
+        "sugestoes": ["macarrao_cozido", "arroz_branco", "frango_grelhado", "patinho_moido",
+                      "carne_magra", "hamburguer_caseiro", "mussarela", "pao_integral",
+                      "alface", "rucula", "tomate", "cenoura_crua", "couve_cozida",
+                      "azeite", "sopa_lentilha", "caldo_abobora", "agua", "refri_zero"],
+        "label": "🌙 Jantar"
+    },
+    "ceia": {
+        "sugestoes": ["iogurte_grego", "whey_dose", "queijo_branco", "banana",
+                      "leite_desnatado", "castanhas"],
+        "label": "🫖 Ceia"
+    },
+    "bebida": {
+        "sugestoes": ["cerveja_lata", "cerveja_long", "cerveja_600", "vinho_taca",
+                      "destilado_dose", "chopp", "xeque_mate_lata", "aperol_spritz"],
+        "label": "🍺 Bebidas alcoólicas"
+    }
+}
 
 # ============================================
 # NAVEGAÇÃO
 # ============================================
-PAGES = {
-    "hoje": "📋 Hoje",
-    "alimentacao": "🍽️ Alimentação",
-    "sono": "😴 Sono / CPAP",
-    "peso": "⚖️ Peso e Medidas",
-    "bio": "🔬 Bio e Exames",
-    "relatorios": "📊 Relatórios",
-    "ia": "🤖 IA"
-}
-
-# Barra de navegação inferior
 def nav_bar():
-    cols = st.columns(4)
+    st.markdown("---")
+    cols = st.columns(5)
     nav_items = [
         ("hoje", "📋", "Hoje"),
-        ("alimentacao", "🍽️", "Alim."),
-        ("peso", "⚖️", "Dados"),
+        ("alimentacao", "🍽️", "Alim"),
+        ("peso", "⚖️", "Peso"),
+        ("sono", "😴", "Sono"),
         ("ia", "🤖", "IA"),
     ]
     for i, (key, icon, label) in enumerate(nav_items):
         with cols[i]:
-            if st.button(f"{icon} {label}", key=f"nav_{key}", use_container_width=True):
-                st.session_state.page = key
-                st.rerun()
-
-# Sub-navegação para "Dados"
-def data_sub_nav():
-    cols = st.columns(4)
-    sub_items = [
-        ("peso", "⚖️ Peso"),
-        ("sono", "😴 Sono"),
-        ("bio", "🔬 Bio"),
-        ("relatorios", "📊 Relat."),
-    ]
-    for i, (key, label) in enumerate(sub_items):
-        with cols[i]:
-            if st.button(label, key=f"sub_{key}", use_container_width=True):
+            tp = "primary" if st.session_state.page == key else "secondary"
+            if st.button(f"{icon}\n{label}", key=f"nav_{key}", use_container_width=True, type=tp):
                 st.session_state.page = key
                 st.rerun()
 
 # ============================================
-# PÁGINAS
+# PÁGINA: HOJE
 # ============================================
-
 def page_hoje():
-    today = get_today()
-    st.markdown(f"## 📋 Hoje — {date.today().strftime('%d/%m/%Y')}")
-
-    # --- PESO DO DIA ---
-    st.markdown("### Peso do dia")
+    st.markdown("# 📋 Meu dia")
+    target = date_selector()
     goals = get_goals()
-    weight_goal = goals.get("weight", {}).get("target_value", 90)
+    weight_goal = float(goals.get("weight", {}).get("target_value", 90))
 
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        peso = st.number_input("Peso (kg)", min_value=50.0, max_value=250.0,
-                               value=143.0, step=0.1, format="%.1f", key="peso_hoje")
-    with col2:
-        if st.button("Salvar peso", key="btn_peso"):
-            upsert_weight(today, peso)
-            st.success("Salvo")
+    # --- PESO ---
+    current_weight = get_weight_for_date(target)
+    st.markdown("#### ⚖️ Peso")
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        pv = current_weight if current_weight else 143.0
+        peso = st.number_input("kg", 50.0, 250.0, pv, 0.1, format="%.1f",
+                               key="peso_hoje", label_visibility="collapsed")
+    with c2:
+        if st.button("💾", key="btn_peso", use_container_width=True):
+            upsert_weight(target, peso)
+            st.rerun()
 
-    st.caption(f"Meta: {weight_goal} kg")
+    if current_weight:
+        diff = current_weight - weight_goal
+        st.markdown(
+            f'<div class="card"><div class="card-value">{current_weight:.1f} kg</div>'
+            f'<div class="card-sub">Meta: {weight_goal:.0f} kg · faltam {diff:.1f} kg</div></div>',
+            unsafe_allow_html=True
+        )
 
-    # --- MINI GRÁFICO ---
     history = get_weight_history(30)
-    if history:
-        import pandas as pd
+    if len(history) > 1:
         df = pd.DataFrame(history)
         df["date"] = pd.to_datetime(df["date"])
-        df["meta"] = float(weight_goal)
-        chart_data = df.set_index("date")[["weight_kg", "meta"]]
-        st.line_chart(chart_data, height=200)
+        df["weight_kg"] = df["weight_kg"].astype(float)
+        df["meta"] = weight_goal
+        st.line_chart(df.set_index("date")[["weight_kg", "meta"]], height=180)
 
     # --- CHECKLIST ---
-    st.markdown("### Checklist do dia")
+    st.markdown("#### 💊 Medicação e hábitos")
     items = get_checklist_items()
-    daily = get_daily_checklist(today)
+    daily = get_daily_checklist(target)
+    skip_keys = {"suco_verde", "whey"}
+    items = [i for i in items if i["item_key"] not in skip_keys]
 
-    current_slot = ""
     slot_labels = {
-        "jejum": "☀️ JEJUM",
-        "manha": "🌅 MANHÃ",
-        "almoco": "🍽️ ALMOÇO",
-        "jantar": "🌙 JANTAR",
-        "noite": "🌑 NOITE",
-        "variavel": "🔄 VARIÁVEL"
+        "jejum": "☀️ Jejum", "manha": "🌅 Manhã", "almoco": "🍽️ Almoço",
+        "jantar": "🌙 Jantar", "noite": "🌑 Noite", "variavel": "🔄 Quando fizer"
     }
-
+    current_slot = ""
     for item in items:
         slot = item["time_slot"]
         if slot != current_slot:
             current_slot = slot
             st.markdown(f"**{slot_labels.get(slot, slot.upper())}**")
-
         checked = daily.get(item["item_key"], {}).get("done", False)
-        dosage = f" — {item['dosage']}" if item.get("dosage") else ""
-        instruction = f"  \n_{item['instruction']}_" if item.get("instruction") else ""
-
-        new_val = st.checkbox(
-            f"{item['name']}{dosage}{instruction}",
-            value=checked,
-            key=f"check_{item['item_key']}"
-        )
+        dosage = f" · {item['dosage']}" if item.get("dosage") else ""
+        label = f"{item['name']}{dosage}"
+        if item.get("instruction"):
+            label += f"  \n↳ _{item['instruction']}_"
+        new_val = st.checkbox(label, value=checked, key=f"ck_{item['item_key']}_{target}")
         if new_val != checked:
-            upsert_checklist(today, item["item_key"], new_val)
+            upsert_checklist(target, item["item_key"], new_val)
 
     # --- RESUMO ALIMENTAÇÃO ---
-    st.markdown("### Alimentação do dia")
-    meals = get_daily_meals(today)
+    st.markdown("#### 🍽️ Alimentação do dia")
+    meals = get_daily_meals(target)
     if meals:
-        total_kcal = sum(m.get("kcal", 0) or 0 for m in meals)
-        total_prot = sum(m.get("protein_g", 0) or 0 for m in meals)
-        total_carb = sum(m.get("carbs_g", 0) or 0 for m in meals)
-        total_fat = sum(m.get("fat_g", 0) or 0 for m in meals)
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("kcal", f"{total_kcal:.0f}")
-        c2.metric("Prot", f"{total_prot:.0f}g")
-        c3.metric("Carb", f"{total_carb:.0f}g")
-        c4.metric("Gord", f"{total_fat:.0f}g")
+        tk = sum(float(m.get("kcal") or 0) for m in meals)
+        tp = sum(float(m.get("protein_g") or 0) for m in meals)
+        tc = sum(float(m.get("carbs_g") or 0) for m in meals)
+        tf = sum(float(m.get("fat_g") or 0) for m in meals)
+        kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2067))
+        prot_goal = float(goals.get("protein_daily", {}).get("target_value", 180))
+        st.markdown(
+            f'<div class="macro-row">'
+            f'<div class="macro-pill"><div class="label">kcal</div><div class="value">{tk:.0f}</div></div>'
+            f'<div class="macro-pill"><div class="label">prot</div><div class="value">{tp:.0f}g</div></div>'
+            f'<div class="macro-pill"><div class="label">carb</div><div class="value">{tc:.0f}g</div></div>'
+            f'<div class="macro-pill"><div class="label">gord</div><div class="value">{tf:.0f}g</div></div>'
+            f'</div>', unsafe_allow_html=True
+        )
+        if tk <= kcal_goal * 1.1 and tp >= prot_goal * 0.9:
+            st.markdown('<span class="badge-green">🟢 Dia coerente</span>', unsafe_allow_html=True)
+        elif tk <= kcal_goal * 1.25 or tp >= prot_goal * 0.7:
+            st.markdown('<span class="badge-yellow">🟡 Atenção</span>', unsafe_allow_html=True)
+        else:
+            st.markdown('<span class="badge-red">🔴 Fora da estratégia</span>', unsafe_allow_html=True)
     else:
-        st.caption("Nenhuma refeição registrada hoje.")
+        st.caption("Nenhuma refeição registrada.")
 
-    # --- OBSERVAÇÕES ---
-    st.markdown("### Observações")
-    st.text_area("Notas do dia", key="obs_hoje", height=80, placeholder="Opcional...")
+    # --- SONO RESUMO ---
+    sleep = get_sleep_for_date(target)
+    if sleep:
+        st.markdown("#### 😴 Sono")
+        hrs = sleep.get("total_hours") or "—"
+        ahi_v = sleep.get("ahi") or "—"
+        en = sleep.get("energy_score") or "—"
+        st.markdown(
+            f'<div class="card"><div class="card-sub">'
+            f'{hrs}h de sono · AHI {ahi_v} · Energia {en}/10</div></div>',
+            unsafe_allow_html=True
+        )
 
-
+# ============================================
+# PÁGINA: ALIMENTAÇÃO
+# ============================================
 def page_alimentacao():
-    today = get_today()
-    st.markdown(f"## 🍽️ Alimentação — {date.today().strftime('%d/%m/%Y')}")
+    st.markdown("# 🍽️ Alimentação")
+    target = date_selector()
 
     foods = get_food_library()
     food_map = {f["food_key"]: f for f in foods}
     food_names = {f["food_key"]: f["name"] for f in foods}
-
-    meal_types = [
-        ("cafe", "☕ Café da manhã / Pós-treino"),
-        ("almoco", "🍽️ Almoço"),
-        ("lanche", "🥪 Lanche / Pré-treino"),
-        ("jantar", "🌙 Jantar"),
-        ("ceia", "🫖 Ceia"),
-    ]
-
     goals = get_goals()
-    kcal_goal = goals.get("kcal_daily", {}).get("target_value", 2067)
-    prot_goal = goals.get("protein_daily", {}).get("target_value", 180)
+    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2067))
+    prot_goal = float(goals.get("protein_daily", {}).get("target_value", 180))
+    all_meals = get_daily_meals(target)
 
-    all_meals = get_daily_meals(today)
+    # Totais no topo
+    tk = sum(float(m.get("kcal") or 0) for m in all_meals)
+    tp = sum(float(m.get("protein_g") or 0) for m in all_meals)
+    tc = sum(float(m.get("carbs_g") or 0) for m in all_meals)
+    tf = sum(float(m.get("fat_g") or 0) for m in all_meals)
+    st.markdown(
+        f'<div class="macro-row">'
+        f'<div class="macro-pill"><div class="label">kcal</div><div class="value">{tk:.0f}</div></div>'
+        f'<div class="macro-pill"><div class="label">prot</div><div class="value">{tp:.0f}g</div></div>'
+        f'<div class="macro-pill"><div class="label">carb</div><div class="value">{tc:.0f}g</div></div>'
+        f'<div class="macro-pill"><div class="label">gord</div><div class="value">{tf:.0f}g</div></div>'
+        f'</div>', unsafe_allow_html=True
+    )
+    if tk > 0:
+        st.caption(f"Calorias: {tk/kcal_goal*100:.0f}% da meta · Proteína: {tp/prot_goal*100:.0f}% da meta")
+    st.markdown("---")
 
-    for meal_key, meal_label in meal_types:
-        with st.expander(meal_label, expanded=False):
-            # Itens já registrados nesta refeição
-            meal_items = [m for m in all_meals if m["meal_type"] == meal_key]
+    for meal_key, meal_info in MEAL_FOOD_MAP.items():
+        meal_items = [m for m in all_meals if m["meal_type"] == meal_key]
+        meal_kcal = sum(float(m.get("kcal") or 0) for m in meal_items)
+        header = meal_info["label"]
+        if meal_items:
+            header += f"  ·  {meal_kcal:.0f} kcal"
+
+        with st.expander(header, expanded=False):
             if meal_items:
                 for mi in meal_items:
                     fname = food_names.get(mi["food_key"], mi["food_key"])
-                    st.caption(
-                        f"✅ {fname} — {mi['quantity_g']:.0f}g | "
-                        f"{mi['kcal']:.0f}kcal | P:{mi['protein_g']:.0f}g "
-                        f"C:{mi['carbs_g']:.0f}g G:{mi['fat_g']:.0f}g"
-                    )
-                    if st.button("🗑️", key=f"del_{mi['id']}"):
-                        db.table("meals").delete().eq("id", mi["id"]).execute()
-                        st.rerun()
+                    c1, c2 = st.columns([4, 1])
+                    with c1:
+                        st.markdown(
+                            f"**{fname}** — {float(mi['quantity_g']):.0f}g  \n"
+                            f"_{float(mi.get('kcal') or 0):.0f}kcal · "
+                            f"P:{float(mi.get('protein_g') or 0):.0f}g · "
+                            f"C:{float(mi.get('carbs_g') or 0):.0f}g · "
+                            f"G:{float(mi.get('fat_g') or 0):.0f}g_"
+                        )
+                    with c2:
+                        if st.button("🗑️", key=f"del_{mi['id']}"):
+                            db.table("meals").delete().eq("id", mi["id"]).execute()
+                            st.rerun()
+                st.markdown("---")
 
-            # Adicionar item
-            st.markdown("**Adicionar item:**")
-            food_options = [""] + [f["food_key"] for f in foods]
-            food_labels = ["Selecione..."] + [f["name"] for f in foods]
+            # Seletor de alimento — sugeridos primeiro
+            sugestoes = meal_info["sugestoes"]
+            fs = [f for f in foods if f["food_key"] in sugestoes]
+            fo = [f for f in foods if f["food_key"] not in sugestoes]
+            ok = [""] + [f["food_key"] for f in fs]
+            ol = ["Selecione..."] + [f["name"] for f in fs]
+            if fo:
+                ok.append("__sep__")
+                ol.append("── Outros ──")
+                for f in fo:
+                    ok.append(f["food_key"])
+                    ol.append(f["name"])
 
-            selected = st.selectbox(
-                "Alimento", options=food_options,
-                format_func=lambda x: food_labels[food_options.index(x)],
-                key=f"sel_{meal_key}"
-            )
+            sel = st.selectbox("Adicionar", options=ok,
+                               format_func=lambda x: ol[ok.index(x)],
+                               key=f"sel_{meal_key}_{target}", label_visibility="collapsed")
 
-            if selected:
-                food = food_map[selected]
-                default_g = float(food["default_portion_g"])
-                qty = st.number_input(
-                    f"Quantidade (g) — porção padrão: {default_g:.0f}g",
-                    min_value=1.0, value=default_g, step=10.0,
-                    key=f"qty_{meal_key}"
-                )
-                # Cálculo
-                factor = qty / 100.0
-                kcal = float(food["kcal_per_100g"]) * factor
-                prot = float(food["protein_per_100g"]) * factor
-                carb = float(food["carbs_per_100g"]) * factor
-                fat = float(food["fat_per_100g"]) * factor
+            if sel and sel != "__sep__":
+                food = food_map[sel]
+                dg = float(food["default_portion_g"])
+                qty = st.number_input(f"Quantidade (g) · porção: {dg:.0f}g",
+                                      1.0, 5000.0, dg, 10.0, key=f"qty_{meal_key}_{target}")
+                fac = qty / 100.0
+                ek = float(food["kcal_per_100g"]) * fac
+                ep = float(food["protein_per_100g"]) * fac
+                ec = float(food["carbs_per_100g"]) * fac
+                ef = float(food["fat_per_100g"]) * fac
+                st.caption(f"→ {ek:.0f} kcal · P:{ep:.0f}g · C:{ec:.0f}g · G:{ef:.0f}g")
 
-                st.caption(f"→ {kcal:.0f} kcal | P:{prot:.0f}g C:{carb:.0f}g G:{fat:.0f}g")
-
-                if st.button("Adicionar", key=f"add_{meal_key}"):
+                if st.button("✅ Adicionar", key=f"add_{meal_key}_{target}", use_container_width=True):
                     db.table("meals").insert({
-                        "date": today,
-                        "meal_type": meal_key,
-                        "food_key": selected,
-                        "quantity_g": qty,
-                        "portions": qty / default_g,
-                        "kcal": kcal,
-                        "protein_g": prot,
-                        "carbs_g": carb,
-                        "fat_g": fat
+                        "date": target, "meal_type": meal_key, "food_key": sel,
+                        "quantity_g": qty, "portions": qty / dg,
+                        "kcal": ek, "protein_g": ep, "carbs_g": ec, "fat_g": ef
                     }).execute()
                     st.rerun()
 
-    # --- TOTAIS DO DIA ---
-    st.markdown("---")
-    st.markdown("### Totais do dia")
-    all_meals = get_daily_meals(today)
-    total_kcal = sum(m.get("kcal", 0) or 0 for m in all_meals)
-    total_prot = sum(m.get("protein_g", 0) or 0 for m in all_meals)
-    total_carb = sum(m.get("carbs_g", 0) or 0 for m in all_meals)
-    total_fat = sum(m.get("fat_g", 0) or 0 for m in all_meals)
-
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("kcal", f"{total_kcal:.0f}", delta=f"{total_kcal - float(kcal_goal):.0f}")
-    c2.metric("Prot", f"{total_prot:.0f}g", delta=f"{total_prot - float(prot_goal):.0f}")
-    c3.metric("Carb", f"{total_carb:.0f}g")
-    c4.metric("Gord", f"{total_fat:.0f}g")
-
-    # Sinalização
-    if total_kcal == 0:
-        st.info("Nenhuma refeição registrada.")
-    elif total_kcal <= float(kcal_goal) * 1.1 and total_prot >= float(prot_goal) * 0.9:
-        st.success("🟢 Dia coerente com a estratégia.")
-    elif total_kcal <= float(kcal_goal) * 1.2 or total_prot >= float(prot_goal) * 0.7:
-        st.warning("🟡 Atenção: revise calorias ou proteína.")
-    else:
-        st.error("🔴 Dia fora da estratégia.")
-
-
+# ============================================
+# PÁGINA: SONO / CPAP
+# ============================================
 def page_sono():
-    today = get_today()
-    st.markdown(f"## 😴 Sono / CPAP — {date.today().strftime('%d/%m/%Y')}")
-
-    # Buscar dados existentes
-    existing = db.table("sleep_cpap").select("*").eq("date", today).execute()
-    data = existing.data[0] if existing.data else {}
+    st.markdown("# 😴 Sono / CPAP")
+    target = date_selector()
+    data = get_sleep_for_date(target)
 
     with st.form("form_sono"):
-        col1, col2 = st.columns(2)
-        with col1:
-            bed_time = st.time_input("Hora que dormiu", value=None, key="bed")
-            total_hours = st.number_input("Horas totais", 0.0, 16.0,
-                                          value=float(data.get("total_hours", 0) or 0), step=0.5)
-            ahi = st.number_input("AHI", 0.0, 100.0,
-                                  value=float(data.get("ahi", 0) or 0), step=0.1)
-            mask_seal = st.selectbox("Vedação máscara", ["boa", "regular", "ruim"],
-                                     index=["boa", "regular", "ruim"].index(data.get("mask_seal", "boa") or "boa"))
-            tiredness = st.slider("Acordou cansado? (0=muito, 10=descansado)", 0, 10,
-                                  value=int(data.get("tiredness_score", 5) or 5))
-        with col2:
-            wake_time = st.time_input("Hora que acordou", value=None, key="wake")
+        st.markdown("**Horários**")
+        c1, c2 = st.columns(2)
+        with c1:
+            bed_time = st.time_input("Dormiu às", value=None, key="bed")
+        with c2:
+            wake_time = st.time_input("Acordou às", value=None, key="wake")
+        total_hours = st.number_input("Horas totais", 0.0, 16.0,
+                                      value=float(data.get("total_hours") or 0), step=0.5)
+
+        st.markdown("**CPAP**")
+        c1, c2 = st.columns(2)
+        with c1:
             used_cpap = st.checkbox("Usou CPAP?", value=bool(data.get("used_cpap", True)))
-            cpap_hours = st.number_input("Horas de CPAP", 0.0, 16.0,
-                                         value=float(data.get("cpap_hours", 0) or 0), step=0.5)
+            cpap_hours = st.number_input("Horas de uso", 0.0, 16.0,
+                                         value=float(data.get("cpap_hours") or 0), step=0.5)
+            ahi = st.number_input("AHI", 0.0, 100.0,
+                                  value=float(data.get("ahi") or 0), step=0.1)
+        with c2:
             leak_rate = st.number_input("Vazamento", 0.0, 100.0,
-                                        value=float(data.get("leak_rate", 0) or 0), step=0.1)
+                                        value=float(data.get("leak_rate") or 0), step=0.1)
+            mo = ["boa", "regular", "ruim"]
+            mask_seal = st.selectbox("Vedação", mo,
+                                     index=mo.index(data.get("mask_seal") or "boa"))
             removed = st.checkbox("Tirou a máscara?", value=bool(data.get("removed_mask", False)))
-            energy = st.slider("Energia do dia (0=nenhuma, 10=máxima)", 0, 10,
-                               value=int(data.get("energy_score", 5) or 5))
 
-        events = st.number_input("Eventos por hora", 0.0, 100.0,
-                                 value=float(data.get("events_per_hour", 0) or 0), step=0.1)
-        notes = st.text_area("Observações", value=data.get("notes", "") or "", height=60)
+        events = st.number_input("Eventos/hora", 0.0, 100.0,
+                                 value=float(data.get("events_per_hour") or 0), step=0.1)
 
-        if st.form_submit_button("Salvar"):
-            record = {
-                "date": today,
+        st.markdown("**Como você está?**")
+        c1, c2 = st.columns(2)
+        with c1:
+            tiredness = st.slider("Cansaço (0=exausto, 10=descansado)", 0, 10,
+                                  value=int(data.get("tiredness_score") or 5))
+        with c2:
+            energy = st.slider("Energia (0=zero, 10=máxima)", 0, 10,
+                               value=int(data.get("energy_score") or 5))
+
+        notes = st.text_area("Observações", value=data.get("notes") or "", height=60)
+
+        if st.form_submit_button("💾 Salvar", use_container_width=True):
+            rec = {
+                "date": target,
                 "bed_time": bed_time.isoformat() if bed_time else None,
                 "wake_time": wake_time.isoformat() if wake_time else None,
-                "total_hours": total_hours,
-                "used_cpap": used_cpap,
-                "cpap_hours": cpap_hours,
-                "ahi": ahi,
-                "leak_rate": leak_rate,
-                "mask_seal": mask_seal,
-                "removed_mask": removed,
-                "events_per_hour": events,
-                "tiredness_score": tiredness,
-                "energy_score": energy,
-                "notes": notes
+                "total_hours": total_hours, "used_cpap": used_cpap,
+                "cpap_hours": cpap_hours, "ahi": ahi, "leak_rate": leak_rate,
+                "mask_seal": mask_seal, "removed_mask": removed,
+                "events_per_hour": events, "tiredness_score": tiredness,
+                "energy_score": energy, "notes": notes
             }
-            db.table("sleep_cpap").upsert(record, on_conflict="date").execute()
-            st.success("Sono salvo.")
+            db.table("sleep_cpap").upsert(rec, on_conflict="date").execute()
+            st.success("Salvo ✓")
 
-
+# ============================================
+# PÁGINA: PESO E MEDIDAS
+# ============================================
 def page_peso():
-    st.markdown("## ⚖️ Peso e Medidas")
-    data_sub_nav()
+    st.markdown("# ⚖️ Peso e Medidas")
+    goals = get_goals()
+    wg = float(goals.get("weight", {}).get("target_value", 90))
 
-    tab1, tab2 = st.tabs(["Peso", "Medidas"])
+    tab1, tab2, tab3 = st.tabs(["📈 Gráfico", "📝 Registrar", "📏 Medidas"])
 
     with tab1:
-        today = get_today()
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            peso = st.number_input("Peso (kg)", 50.0, 250.0, 143.0, 0.1, key="peso_pg")
-        with col2:
-            dt = st.date_input("Data", value=date.today(), key="dt_peso")
-        if st.button("Salvar peso", key="btn_peso_pg"):
-            upsert_weight(dt.isoformat(), peso)
-            st.success("Salvo")
-
-        # Gráfico
-        goals = get_goals()
-        weight_goal = goals.get("weight", {}).get("target_value", 90)
-        history = get_weight_history(90)
+        period = st.selectbox("Período", ["30 dias", "60 dias", "90 dias", "Tudo"])
+        dm = {"30 dias": 30, "60 dias": 60, "90 dias": 90, "Tudo": 3650}
+        history = get_weight_history(dm[period])
         if history:
-            import pandas as pd
             df = pd.DataFrame(history)
             df["date"] = pd.to_datetime(df["date"])
-            df["meta"] = float(weight_goal)
-            chart_data = df.set_index("date")[["weight_kg", "meta"]]
-            st.line_chart(chart_data, height=300)
-
-        # Histórico editável
-        if history:
-            st.markdown("### Histórico")
-            for h in reversed(history[-10:]):
-                c1, c2, c3 = st.columns([2, 1, 1])
-                c1.text(f"{h['date']} — {h['weight_kg']} kg")
-                with c3:
-                    if st.button("🗑️", key=f"dw_{h['date']}"):
-                        db.table("daily_weight").delete().eq("date", h["date"]).execute()
-                        st.rerun()
+            df["weight_kg"] = df["weight_kg"].astype(float)
+            df["meta"] = wg
+            st.line_chart(df.set_index("date")[["weight_kg", "meta"]], height=300)
+            if len(history) > 1:
+                fi = float(history[0]["weight_kg"])
+                la = float(history[-1]["weight_kg"])
+                di = la - fi
+                st.caption(f"Primeiro: {fi:.1f} kg · Último: {la:.1f} kg · Variação: {'+'if di>0 else ''}{di:.1f} kg")
+        else:
+            st.caption("Nenhum peso registrado.")
 
     with tab2:
-        st.markdown("### Registrar medidas")
-        dt_m = st.date_input("Data", value=date.today(), key="dt_med")
-        col1, col2 = st.columns(2)
-        with col1:
-            cintura = st.number_input("Cintura (cm)", 0.0, 250.0, 0.0, 0.5, key="m_cin")
-            abdomen = st.number_input("Abdômen (cm)", 0.0, 250.0, 0.0, 0.5, key="m_abd")
-            peito = st.number_input("Peito (cm)", 0.0, 250.0, 0.0, 0.5, key="m_pei")
-        with col2:
-            braco = st.number_input("Braço (cm)", 0.0, 100.0, 0.0, 0.5, key="m_bra")
-            coxa = st.number_input("Coxa (cm)", 0.0, 150.0, 0.0, 0.5, key="m_cox")
-            quadril = st.number_input("Quadril (cm)", 0.0, 250.0, 0.0, 0.5, key="m_qua")
+        dt = st.date_input("Data", value=date.today(), key="dt_peso_r")
+        peso = st.number_input("Peso (kg)", 50.0, 250.0, 143.0, 0.1, key="peso_r")
+        if st.button("💾 Salvar", use_container_width=True, key="btn_save_peso"):
+            upsert_weight(dt.isoformat(), peso)
+            st.success("Salvo ✓")
+        st.markdown("**Últimos registros**")
+        for h in reversed(get_weight_history(30)):
+            c1, c2 = st.columns([3, 1])
+            c1.text(f"{h['date']}  →  {h['weight_kg']} kg")
+            with c2:
+                if st.button("🗑️", key=f"dw_{h['date']}"):
+                    db.table("daily_weight").delete().eq("date", h["date"]).execute()
+                    st.rerun()
 
-        if st.button("Salvar medidas"):
+    with tab3:
+        dt_m = st.date_input("Data", value=date.today(), key="dt_med")
+        c1, c2 = st.columns(2)
+        with c1:
+            cin = st.number_input("Cintura (cm)", 0.0, 250.0, 0.0, 0.5, key="mc")
+            abd = st.number_input("Abdômen (cm)", 0.0, 250.0, 0.0, 0.5, key="ma")
+            pei = st.number_input("Peito (cm)", 0.0, 250.0, 0.0, 0.5, key="mp")
+        with c2:
+            bra = st.number_input("Braço (cm)", 0.0, 100.0, 0.0, 0.5, key="mb")
+            cox = st.number_input("Coxa (cm)", 0.0, 150.0, 0.0, 0.5, key="mx")
+            qua = st.number_input("Quadril (cm)", 0.0, 250.0, 0.0, 0.5, key="mq")
+        if st.button("💾 Salvar medidas", use_container_width=True):
             db.table("measurements").insert({
                 "date": dt_m.isoformat(),
-                "waist_cm": cintura or None,
-                "abdomen_cm": abdomen or None,
-                "chest_cm": peito or None,
-                "arm_cm": braco or None,
-                "thigh_cm": coxa or None,
-                "hip_cm": quadril or None
+                "waist_cm": cin or None, "abdomen_cm": abd or None,
+                "chest_cm": pei or None, "arm_cm": bra or None,
+                "thigh_cm": cox or None, "hip_cm": qua or None
             }).execute()
-            st.success("Medidas salvas.")
+            st.success("Salvo ✓")
 
-
-def page_bio():
-    st.markdown("## 🔬 Bioimpedância e Exames")
-    data_sub_nav()
-
-    tab1, tab2 = st.tabs(["Bioimpedância", "Exames"])
-
-    with tab1:
-        st.markdown("### Nova bioimpedância")
-        with st.form("form_bio"):
-            dt = st.date_input("Data")
-            c1, c2 = st.columns(2)
-            with c1:
-                peso = st.number_input("Peso (kg)", 50.0, 250.0, 143.0, 0.1)
-                fat_pct = st.number_input("% Gordura", 0.0, 80.0, 50.0, 0.1)
-                visc = st.number_input("Gordura visceral", 0, 60, 31)
-            with c2:
-                muscle = st.number_input("Musc. esquelética (kg)", 0.0, 100.0, 39.0, 0.1)
-                ffm = st.number_input("Massa livre gord. (kg)", 0.0, 150.0, 64.0, 0.1)
-                bmr = st.number_input("TMB (kcal)", 0.0, 5000.0, 2681.0, 1.0)
-            notes = st.text_area("Observação", height=60)
-            if st.form_submit_button("Salvar"):
-                db.table("bioimpedance").insert({
-                    "date": dt.isoformat(), "weight_kg": peso, "fat_pct": fat_pct,
-                    "visceral_fat": visc, "skeletal_muscle_kg": muscle,
-                    "fat_free_mass_kg": ffm, "bmr_kcal": bmr, "notes": notes
-                }).execute()
-                st.success("Bioimpedância salva.")
-
-        # Histórico
-        bios = db.table("bioimpedance").select("*").order("date", desc=True).limit(5).execute()
-        if bios.data:
-            st.markdown("### Histórico")
-            for b in bios.data:
-                st.caption(
-                    f"📅 {b['date']} | {b['weight_kg']}kg | "
-                    f"Gord: {b['fat_pct']}% | Visc: {b['visceral_fat']} | "
-                    f"Musc: {b['skeletal_muscle_kg']}kg"
-                )
-
-    with tab2:
-        st.markdown("### Novos exames")
-        with st.form("form_lab"):
-            dt = st.date_input("Data", key="dt_lab")
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                glucose = st.number_input("Glicose", 0.0, 500.0, 0.0, 1.0)
-                hba1c = st.number_input("HbA1c", 0.0, 15.0, 0.0, 0.1)
-                insulin = st.number_input("Insulina", 0.0, 100.0, 0.0, 0.1)
-                homa = st.number_input("HOMA-IR", 0.0, 20.0, 0.0, 0.01)
-                tsh = st.number_input("TSH", 0.0, 50.0, 0.0, 0.01)
-                t4 = st.number_input("T4 livre", 0.0, 10.0, 0.0, 0.01)
-                testo = st.number_input("Testosterona", 0.0, 1500.0, 0.0, 1.0)
-            with c2:
-                trig = st.number_input("Triglicérides", 0.0, 1000.0, 0.0, 1.0)
-                ggt = st.number_input("GGT", 0.0, 500.0, 0.0, 1.0)
-                col_t = st.number_input("Colesterol total", 0.0, 500.0, 0.0, 1.0)
-                ldl = st.number_input("LDL", 0.0, 300.0, 0.0, 1.0)
-                hdl = st.number_input("HDL", 0.0, 150.0, 0.0, 1.0)
-                tgo = st.number_input("TGO", 0.0, 500.0, 0.0, 1.0)
-                tgp = st.number_input("TGP", 0.0, 500.0, 0.0, 1.0)
-            with c3:
-                mag = st.number_input("Magnésio", 0.0, 10.0, 0.0, 0.1)
-                b12 = st.number_input("B12", 0.0, 2000.0, 0.0, 1.0)
-                vitd = st.number_input("Vitamina D", 0.0, 150.0, 0.0, 0.1)
-                creat = st.number_input("Creatinina", 0.0, 15.0, 0.0, 0.01)
-                egfr = st.number_input("eGFR", 0.0, 150.0, 0.0, 1.0)
-                cpk = st.number_input("CPK", 0.0, 1000.0, 0.0, 1.0)
-            notes = st.text_area("Observação", key="lab_notes", height=60)
-            if st.form_submit_button("Salvar exames"):
-                record = {
-                    "date": dt.isoformat(),
-                    "glucose": glucose or None, "hba1c": hba1c or None,
-                    "insulin": insulin or None, "homa_ir": homa or None,
-                    "tsh": tsh or None, "t4_free": t4 or None,
-                    "triglycerides": trig or None, "ggt": ggt or None,
-                    "total_cholesterol": col_t or None, "ldl": ldl or None,
-                    "hdl": hdl or None, "tgo": tgo or None, "tgp": tgp or None,
-                    "magnesium": mag or None, "b12": b12 or None,
-                    "vitamin_d": vitd or None, "creatinine": creat or None,
-                    "egfr": egfr or None, "testosterone": testo or None,
-                    "cpk": cpk or None, "notes": notes
-                }
-                db.table("lab_results").insert(record).execute()
-                st.success("Exames salvos.")
-
-
-def page_relatorios():
-    st.markdown("## 📊 Relatórios")
-    data_sub_nav()
-    st.info("Módulo em construção — será ativado após acumular dados.")
-
-
+# ============================================
+# PÁGINA: IA
+# ============================================
 def page_ia():
-    st.markdown("## 🤖 IA")
-    st.info("Módulo em construção — será ativado após acumular dados.")
-
+    st.markdown("# 🤖 IA")
+    st.markdown("Módulo em construção. Use o export para análise no Claude.")
+    if st.button("📦 Exportar últimos 30 dias", use_container_width=True):
+        import json
+        start = (date.today() - timedelta(days=30)).isoformat()
+        export = {
+            "peso": get_weight_history(30),
+            "refeicoes": (db.table("meals").select("*").gte("date", start).order("date").execute()).data or [],
+            "sono": (db.table("sleep_cpap").select("*").gte("date", start).order("date").execute()).data or [],
+            "checklist": (db.table("checklist_daily").select("*").gte("date", start).order("date").execute()).data or [],
+        }
+        js = json.dumps(export, indent=2, ensure_ascii=False, default=str)
+        st.download_button("⬇️ Baixar JSON", data=js,
+                           file_name=f"export_{date.today().isoformat()}.json",
+                           mime="application/json", use_container_width=True)
 
 # ============================================
 # ROTEAMENTO
@@ -606,12 +595,7 @@ page_map = {
     "alimentacao": page_alimentacao,
     "sono": page_sono,
     "peso": page_peso,
-    "bio": page_bio,
-    "relatorios": page_relatorios,
     "ia": page_ia,
 }
-
 page_map[st.session_state.page]()
-
-st.markdown("---")
 nav_bar()
