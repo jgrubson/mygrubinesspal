@@ -561,34 +561,43 @@ def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=Non
     routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
     done = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
     total = len(routine_items)
-    trained = bool(checklist.get("treino", {}).get("done"))
+    workout = workout or {}
+    trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
 
-    positives, attentions, actions = [], [], []
+    positives = []
+    attention_items = []
+    action_items = []
+
+    def add_attention(text, priority=5):
+        attention_items.append((priority, text))
+
+    def add_action(text, priority=5):
+        action_items.append((priority, text))
 
     if t["kcal"] == 0:
-        attentions.append("Você ainda não registrou alimentação suficiente para ler o dia com segurança.")
-        actions.append("Preencha as refeições antes de confiar na análise.")
+        add_attention("Você ainda não registrou alimentação suficiente para ler o dia com segurança.", priority=10)
+        add_action("Preencha as refeições antes de confiar na análise.", priority=10)
     else:
         if t["kcal"] <= kcal_goal * 1.08:
             positives.append("As calorias do dia ficaram numa faixa coerente para o objetivo.")
         else:
-            attentions.append("As calorias passaram do ponto para um dia de corte controlado.")
-            actions.append("Ajuste amanhã a refeição que mais concentrou energia no dia.")
+            add_attention("As calorias passaram do ponto para um dia de corte controlado.", priority=7)
+            add_action("Ajuste amanhã a refeição que mais concentrou energia no dia.", priority=7)
 
         if t["prot"] >= protein_goal * 0.85:
             positives.append("A proteína do dia ficou em nível bom para preservar massa magra.")
         elif t["prot"] > 0:
-            attentions.append("A proteína ficou abaixo do ideal para preservar massa magra com mais segurança.")
-            actions.append("Suba proteína com comida de verdade no almoço e no jantar.")
+            add_attention("A proteína ficou abaixo do ideal para preservar massa magra com mais segurança.", priority=8)
+            add_action("Suba proteína com comida de verdade no almoço e no jantar.", priority=8)
 
         if len(meals) <= 2:
-            attentions.append("O dia está com poucas refeições registradas e isso distorce a leitura.")
-            actions.append("Registre tudo, inclusive quando sair do plano.")
+            add_attention("O dia está com poucas refeições registradas e isso distorce a leitura.", priority=6)
+            add_action("Registre tudo, inclusive quando sair do plano.", priority=6)
 
         whey_count = sum(1 for m in meals if (m.get("food_key") or "") == "whey_dose")
         if whey_count >= 2:
-            attentions.append("O dia ficou dependente demais de whey para fechar proteína.")
-            actions.append("Distribua melhor a proteína com refeições principais mais fortes.")
+            add_attention("O dia ficou dependente demais de whey para fechar proteína.", priority=5)
+            add_action("Distribua melhor a proteína com refeições principais mais fortes.", priority=5)
 
     if sleep:
         total_hours = float(sleep.get("total_hours") or 0)
@@ -596,18 +605,18 @@ def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=Non
         if total_hours >= 7:
             positives.append("O sono da noite anterior deu uma base melhor para segurar fome e rotina.")
         elif total_hours > 0:
-            attentions.append("O sono veio curto e isso tende a piorar fome, energia e aderência.")
-            actions.append("Hoje vale evitar compensar cansaço com calorias líquidas ou belisco solto.")
+            add_attention("O sono veio curto e isso tende a piorar fome, energia e aderência.", priority=8)
+            add_action("Hoje vale evitar compensar cansaço com calorias líquidas ou belisco solto.", priority=6)
         if energy is not None and int(energy) <= 3:
-            attentions.append("Sua energia do dia está baixa, então o risco de desorganizar a rotina sobe.")
+            add_attention("Sua energia do dia está baixa, então o risco de desorganizar a rotina sobe.", priority=7)
     else:
-        attentions.append("O sono da noite anterior ainda não foi registrado.")
-        actions.append("Preencha o sono antes de fechar a leitura do dia.")
+        add_attention("O sono da noite anterior ainda não foi registrado.", priority=8)
+        add_action("Preencha o sono antes de fechar a leitura do dia.", priority=8)
 
     if trained:
-        workout_type = (workout or {}).get("workout_type")
-        split = (workout or {}).get("strength_split")
-        duration = (workout or {}).get("duration_min")
+        workout_type = workout.get("workout_type")
+        split = workout.get("strength_split")
+        duration = workout.get("duration_min")
         detail_parts = []
         if workout_type:
             detail_parts.append(workout_type.lower())
@@ -621,28 +630,37 @@ def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=Non
         else:
             positives.append("Você marcou treino hoje, o que ajuda a sustentar força, gasto e consistência.")
     else:
-        attentions.append("Hoje está sem treino marcado, e isso pesa porque a consistência do treino ajuda a preservar massa magra durante o corte.")
-        actions.append("Se não der para fazer musculação, registre pelo menos uma caminhada curta ou deixe o próximo treino definido agora.")
+        add_attention("Hoje ficou sem treino marcado. Num processo de emagrecimento como o seu, isso pesa porque a frequência de treino ajuda a preservar massa magra e reduz a chance de o corte virar só perda de peso sem qualidade.", priority=9)
+        add_action("Se musculação não couber hoje, escolha uma alternativa mínima agora: 20 a 30 minutos de caminhada, cardio leve ou já deixe amanhã definido com horário e tipo de treino.", priority=9)
 
     if total:
         if done >= max(1, int(total * 0.8)):
             positives.append("A rotina de remédios e suplementos ficou bem executada.")
         elif done < max(1, int(total * 0.5)):
-            attentions.append("A aderência da rotina ficou baixa no que era previsível executar.")
-            actions.append("Use o checklist como fechamento do dia, não só como lembrete solto.")
+            add_attention("A aderência da rotina ficou baixa no que era previsível executar.", priority=6)
+            add_action("Use o checklist como fechamento do dia, não só como lembrete solto.", priority=6)
 
     if weight is None:
-        actions.append("Registre o peso do dia para manter o histórico consistente.")
+        add_action("Registre o peso do dia para manter o histórico consistente.", priority=4)
 
     positives = positives[:2] or ["Você já tem dados suficientes para não operar no escuro hoje."]
-    attentions = attentions[:2] or ["Nada crítico apareceu hoje, mas ainda vale manter o dia completo."]
-    actions = actions[:2] or ["O próximo passo é repetir o básico sem abrir muitas exceções."]
+    attention_items = sorted(attention_items, key=lambda x: x[0], reverse=True)
+    action_items = sorted(action_items, key=lambda x: x[0], reverse=True)
+    primary_attention = attention_items[0][1] if attention_items else "Nada crítico apareceu hoje, mas ainda vale manter o dia completo."
+    primary_action = action_items[0][1] if action_items else "O próximo passo é repetir o básico sem abrir muitas exceções."
+
+    extra_attention = attention_items[1][1] if len(attention_items) > 1 else None
+    extra_action = action_items[1][1] if len(action_items) > 1 else None
 
     html = '<div class="analysis-box"><div class="t">Leitura do dia</div>'
-    html += '<div style="font-size:14px;line-height:1.62">'
+    html += '<div style="font-size:14px;line-height:1.65">'
     html += f"<p style='margin:0 0 10px'><strong>Ponto positivo.</strong> {positives[0]}</p>"
-    html += f"<p style='margin:0 0 10px'><strong>Ponto de atenção.</strong> {attentions[0]}</p>"
-    html += f"<p style='margin:0'><strong>Próximo ajuste.</strong> {actions[0]}</p>"
+    html += f"<p style='margin:0 0 10px'><strong>Ponto de atenção.</strong> {primary_attention}</p>"
+    if extra_attention and extra_attention != primary_attention:
+        html += f"<p style='margin:0 0 10px'><strong>Outro sinal do dia.</strong> {extra_attention}</p>"
+    html += f"<p style='margin:0 0 10px'><strong>Próximo ajuste.</strong> {primary_action}</p>"
+    if extra_action and extra_action != primary_action:
+        html += f"<p style='margin:0'><strong>Dica prática.</strong> {extra_action}</p>"
     html += '</div></div>'
     return html
 
@@ -803,7 +821,7 @@ def page_hoje():
         detail = " · ".join(summary) if summary else "Treino marcado hoje."
         st.markdown(f'<div class="meal-card"><div class="meal-name">Treino registrado</div><div class="meal-detail">{detail}</div></div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="meal-card"><div class="meal-name">Sem treino marcado</div><div class="meal-detail">Se não for musculação hoje, vale pelo menos registrar caminhada, corrida leve ou mobilidade para manter consistência.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="meal-card"><div class="meal-name">Sem treino marcado</div><div class="meal-detail">Se não for musculação hoje, vale pelo menos uma caminhada de 20–30 min, cardio leve ou mobilidade para não zerar o dia.</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">Alimentação do dia</div>', unsafe_allow_html=True)
     meals = get_meals(target)
