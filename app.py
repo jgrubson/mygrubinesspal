@@ -1,4 +1,5 @@
 from datetime import date, timedelta, datetime, time
+from statistics import mean
 from zoneinfo import ZoneInfo
 import calendar
 import json
@@ -121,12 +122,13 @@ st.markdown(
         margin-bottom: 8px;
     }
     .analysis-box {
-        background: linear-gradient(135deg, rgba(21,51,42,0.92), rgba(18,25,43,0.98));
-        border: 1px solid #24453b;
+        background: linear-gradient(135deg, rgba(17,58,47,0.96), rgba(18,25,43,0.98));
+        border: 1px solid #2b5a4e;
         color: #dbf9ea;
-        border-radius: 16px;
-        padding: 14px 16px;
+        border-radius: 18px;
+        padding: 16px 18px;
         margin-top: 8px;
+        box-shadow: 0 14px 30px rgba(0,0,0,0.18);
     }
     .analysis-box .t {font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--green); font-weight: 800; margin-bottom: 8px;}
     .analysis-box ul {margin: 0; padding-left: 18px;}
@@ -160,11 +162,22 @@ if "chat_history" not in st.session_state:
 # DATA HELPERS
 # ==================================================
 def q(table, select="*", **filters):
-    query = db.table(table).select(select)
-    for k, v in filters.items():
-        query = query.eq(k, v)
-    res = query.execute()
-    return res.data or []
+    try:
+        query = db.table(table).select(select)
+        for k, v in filters.items():
+            query = query.eq(k, v)
+        res = query.execute()
+        return res.data or []
+    except Exception:
+        return []
+
+
+def safe_execute(fn):
+    try:
+        res = fn()
+        return True, getattr(res, "data", None)
+    except Exception as e:
+        return False, str(e)
 
 
 def get_goals():
@@ -222,6 +235,16 @@ def get_foods():
 def get_sleep(dt):
     rows = q("sleep_cpap", date=dt)
     return rows[0] if rows else {}
+
+
+def get_workout(dt):
+    rows = q("workout_logs", date=dt)
+    return rows[0] if rows else {}
+
+
+def save_workout(dt, payload):
+    data = {"date": dt, **payload}
+    return safe_execute(lambda: db.table("workout_logs").upsert(data, on_conflict="date").execute())
 
 
 def meal_totals(meals):
@@ -406,6 +429,76 @@ def overall_status(dt_iso, goals):
     return "r", f"fraco · {score}/100"
 
 
+def period_summary(days):
+    end_d = st.session_state.sel_date
+    start_d = end_d - timedelta(days=days - 1)
+    start = start_d.isoformat()
+    end_s = end_d.isoformat()
+    meals = db.table("meals").select("date,meal_type,kcal,protein_g,carbs_g,fat_g,food_key").gte("date", start).lte("date", end_s).execute().data or []
+    sleep_rows = db.table("sleep_cpap").select("date,total_hours,energy_score,ahi").gte("date", start).lte("date", end_s).execute().data or []
+    checks = db.table("checklist_daily").select("date,item_key,done").gte("date", start).lte("date", end_s).execute().data or []
+    weights = get_weight_history(days, end_date=end_d)
+    by_day = {}
+    for m in meals:
+        d = m["date"]
+        by_day.setdefault(d, {"kcal":0.0,"prot":0.0,"meals":0})
+        by_day[d]["kcal"] += float(m.get("kcal") or 0)
+        by_day[d]["prot"] += float(m.get("protein_g") or 0)
+        by_day[d]["meals"] += 1
+    sleep_map = {r["date"]: r for r in sleep_rows}
+    treino_days = len({r["date"] for r in checks if r.get("item_key") == "treino" and r.get("done")})
+    routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
+    routine_keys = {i["item_key"] for i in routine_items}
+    routine_counts = {}
+    for r in checks:
+        if r.get("item_key") in routine_keys:
+            routine_counts.setdefault(r["date"], {"done":0})
+            if r.get("done"):
+                routine_counts[r["date"]]["done"] += 1
+    active_days = sorted(set(list(by_day.keys()) + list(sleep_map.keys()) + list(routine_counts.keys())))
+    avg_kcal = mean([by_day[d]["kcal"] for d in by_day]) if by_day else 0
+    avg_prot = mean([by_day[d]["prot"] for d in by_day]) if by_day else 0
+    avg_sleep = mean([float(r.get("total_hours") or 0) for r in sleep_rows if r.get("total_hours")]) if sleep_rows else 0
+    avg_energy = mean([int(r.get("energy_score") or 0) for r in sleep_rows if r.get("energy_score") is not None]) if sleep_rows else 0
+    avg_ahi = mean([float(r.get("ahi") or 0) for r in sleep_rows if r.get("ahi") is not None]) if sleep_rows else 0
+    filled_days = sum(1 for d in active_days if (by_day.get(d, {}).get("meals",0) >= 3 or sleep_map.get(d) or routine_counts.get(d)))
+    first_w = float(weights[0]["weight_kg"]) if weights else None
+    last_w = float(weights[-1]["weight_kg"]) if weights else None
+    return {
+        "days": days,
+        "start": start,
+        "end": end_s,
+        "avg_kcal": avg_kcal,
+        "avg_prot": avg_prot,
+        "avg_sleep": avg_sleep,
+        "avg_energy": avg_energy,
+        "avg_ahi": avg_ahi,
+        "treino_days": treino_days,
+        "filled_days": filled_days,
+        "active_days": len(active_days),
+        "first_weight": first_w,
+        "last_weight": last_w,
+    }
+
+
+def render_period_summary_card(summary):
+    delta = None
+    if summary["first_weight"] is not None and summary["last_weight"] is not None:
+        delta = summary["last_weight"] - summary["first_weight"]
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown(f"**Resumo dos últimos {summary['days']} dias**")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("kcal média", f"{summary['avg_kcal']:.0f}")
+    c2.metric("prot média", f"{summary['avg_prot']:.0f}g")
+    c3.metric("sono médio", f"{summary['avg_sleep']:.1f}h")
+    c4.metric("treinos", f"{summary['treino_days']}")
+    if delta is not None:
+        st.caption(f"Peso no período: {summary['first_weight']:.1f} → {summary['last_weight']:.1f} kg ({delta:+.1f} kg) · dias com registro: {summary['filled_days']}")
+    else:
+        st.caption(f"Dias com registro útil: {summary['filled_days']} · energia média: {summary['avg_energy']:.1f}/10 · AHI médio: {summary['avg_ahi']:.1f}")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
 def build_day_review(dt_iso, goals, meals, checklist, sleep, weight):
     t = meal_totals(meals)
     kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2067))
@@ -413,49 +506,54 @@ def build_day_review(dt_iso, goals, meals, checklist, sleep, weight):
     routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
     done = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
     total = len(routine_items)
+    trained = bool(checklist.get("treino", {}).get("done"))
 
-    positives = []
-    attentions = []
-    actions = []
+    positives, attentions, actions = [], [], []
 
     if t["kcal"] == 0:
         attentions.append("Você ainda não registrou alimentação suficiente para ler o dia com segurança.")
         actions.append("Preencha as refeições antes de confiar na análise.")
     else:
         if t["kcal"] <= kcal_goal * 1.08:
-            positives.append("As calorias do dia ficaram dentro de uma faixa coerente para o objetivo.")
+            positives.append("As calorias do dia ficaram numa faixa coerente para o objetivo.")
         else:
             attentions.append("As calorias passaram do ponto para um dia de corte controlado.")
-            actions.append("Amanhã concentre o ajuste na refeição que mais pesou no total do dia.")
+            actions.append("Ajuste amanhã a refeição que mais concentrou energia no dia.")
 
         if t["prot"] >= protein_goal * 0.85:
             positives.append("A proteína do dia ficou em nível bom para preservar massa magra.")
         elif t["prot"] > 0:
-            attentions.append("A proteína ficou abaixo do que seria ideal para o seu objetivo.")
-            actions.append("Suba proteína com comida de verdade nas refeições principais, não só suplemento.")
+            attentions.append("A proteína ficou abaixo do ideal para preservar massa magra com mais segurança.")
+            actions.append("Suba proteína com comida de verdade no almoço e no jantar.")
 
         if len(meals) <= 2:
             attentions.append("O dia está com poucas refeições registradas e isso distorce a leitura.")
-            actions.append("Registre todas as refeições, mesmo quando fugir do plano.")
+            actions.append("Registre tudo, inclusive quando sair do plano.")
 
         whey_count = sum(1 for m in meals if (m.get("food_key") or "") == "whey_dose")
         if whey_count >= 2:
             attentions.append("O dia ficou dependente demais de whey para fechar proteína.")
-            actions.append("Distribua melhor a proteína com almoço e jantar mais fortes.")
+            actions.append("Distribua melhor a proteína com refeições principais mais fortes.")
 
     if sleep:
         total_hours = float(sleep.get("total_hours") or 0)
         energy = sleep.get("energy_score")
         if total_hours >= 7:
-            positives.append("O sono da noite anterior já permite começar o dia com base melhor.")
+            positives.append("O sono da noite anterior deu uma base melhor para segurar fome e rotina.")
         elif total_hours > 0:
-            attentions.append("O sono veio curto e isso pode piorar fome, energia e aderência.")
+            attentions.append("O sono veio curto e isso tende a piorar fome, energia e aderência.")
             actions.append("Hoje vale evitar compensar cansaço com calorias líquidas ou belisco solto.")
         if energy is not None and int(energy) <= 3:
-            attentions.append("Sua energia do dia está baixa, então o risco de desorganizar rotina sobe.")
+            attentions.append("Sua energia do dia está baixa, então o risco de desorganizar a rotina sobe.")
     else:
         attentions.append("O sono da noite anterior ainda não foi registrado.")
         actions.append("Preencha o sono antes de fechar a leitura do dia.")
+
+    if trained:
+        positives.append("Você marcou treino hoje, o que ajuda a sustentar força, gasto e consistência.")
+    else:
+        attentions.append("Não há treino marcado hoje.")
+        actions.append("Se não treinou mesmo, tente pelo menos uma caminhada curta ou deixe o próximo treino já definido.")
 
     if total:
         if done >= max(1, int(total * 0.8)):
@@ -467,15 +565,16 @@ def build_day_review(dt_iso, goals, meals, checklist, sleep, weight):
     if weight is None:
         actions.append("Registre o peso do dia para manter o histórico consistente.")
 
-    positives = positives[:2] or ["Você já tem alguns dados do dia salvos, o que é melhor do que operar no escuro."]
-    attentions = attentions[:2] or ["Nada crítico apareceu no dia, mas ainda vale manter o registro completo."]
-    actions = actions[:1] or ["O próximo passo é só repetir o básico sem abrir muitas exceções."]
+    positives = positives[:2] or ["Você já tem dados suficientes para não operar no escuro hoje."]
+    attentions = attentions[:2] or ["Nada crítico apareceu hoje, mas ainda vale manter o dia completo."]
+    actions = actions[:2] or ["O próximo passo é repetir o básico sem abrir muitas exceções."]
 
-    html = '<div class="analysis-box"><div class="t">Leitura do dia</div><ul>'
-    html += f"<li><strong>Ponto positivo:</strong> {positives[0]}</li>"
-    html += f"<li><strong>Ponto de atenção:</strong> {attentions[0]}</li>"
-    html += f"<li><strong>Próximo ajuste:</strong> {actions[0]}</li>"
-    html += "</ul></div>"
+    html = '<div class="analysis-box"><div class="t">Leitura do dia</div>'
+    html += '<div style="font-size:14px;line-height:1.55">'
+    html += f"<p style='margin:0 0 8px'><strong>Ponto positivo.</strong> {positives[0]}</p>"
+    html += f"<p style='margin:0 0 8px'><strong>Ponto de atenção.</strong> {attentions[0]}</p>"
+    html += f"<p style='margin:0'><strong>Próximo ajuste.</strong> {actions[0]}</p>"
+    html += '</div></div>'
     return html
 
 
@@ -908,16 +1007,76 @@ def page_treino_inner(target):
     st.markdown('<div class="section-title">Treino</div>', unsafe_allow_html=True)
     ck = get_checklist(target)
     treino_done = ck.get("treino", {}).get("done", False)
+    workout = get_workout(target)
+
     trained = st.checkbox("Treinei hoje", value=treino_done, key=f"trained_{target}")
     if trained != treino_done:
         save_check(target, "treino", trained)
         st.rerun()
-    if trained:
-        when = st.radio("Horário", ["Manhã", "Tarde", "Fim de semana"], horizontal=True, key=f"train_when_{target}")
-        obs = st.text_area("O que treinou / observações", height=80, key=f"train_obs_{target}")
-        st.caption(f"Treino marcado como feito · {when}")
-    else:
-        st.caption("Sem treino marcado nessa data.")
+
+    if not trained:
+        st.caption("Sem treino marcado nessa data. Se quiser, marque quando treinar ou planeje o próximo.")
+        st.markdown('<div class="meal-card"><div class="meal-name">Sugestão útil</div><div class="meal-detail">Mesmo sem musculação, registrar 20–30 minutos de caminhada já melhora consistência e leitura do período.</div></div>', unsafe_allow_html=True)
+        return
+
+    workout_type_options = ["Musculação", "Caminhada", "Corrida", "Bike", "Mobilidade / alongamento", "Outro"]
+    split_options = ["Superior", "Inferior", "Push", "Pull", "Full body", "Outro"]
+    default_type = workout.get("workout_type") if workout.get("workout_type") in workout_type_options else "Musculação"
+    workout_type = st.selectbox("Tipo de treino", workout_type_options, index=workout_type_options.index(default_type), key=f"wtype_{target}")
+
+    c1, c2 = st.columns(2)
+    with c1:
+        duration = st.number_input("Duração total (min)", 0, 300, int(workout.get("duration_min") or 0), 5, key=f"wdur_{target}")
+        intensity = st.slider("Intensidade percebida", 1, 10, int(workout.get("intensity") or 6), key=f"wint_{target}")
+    with c2:
+        distance = st.number_input("Distância (km, se fizer sentido)", 0.0, 100.0, float(workout.get("distance_km") or 0.0), 0.1, key=f"wdist_{target}")
+        calories = st.number_input("Calorias do aparelho / relógio (opcional)", 0, 5000, int(workout.get("device_kcal") or 0), 10, key=f"wkcal_{target}")
+
+    split = None
+    if workout_type == "Musculação":
+        default_split = workout.get("strength_split") if workout.get("strength_split") in split_options else "Superior"
+        split = st.selectbox("Divisão do treino", split_options, index=split_options.index(default_split), key=f"wsplit_{target}")
+
+    notes = st.text_area("Observações do treino", value=workout.get("notes") or "", height=90, key=f"wnotes_{target}", placeholder="Ex.: peito e tríceps, 25 min de caminhada, corrida leve...")
+
+    if st.button("Salvar detalhes do treino", key=f"save_workout_{target}", use_container_width=True):
+        ok, msg = save_workout(
+            target,
+            {
+                "workout_type": workout_type,
+                "strength_split": split,
+                "duration_min": duration or None,
+                "distance_km": distance or None,
+                "device_kcal": calories or None,
+                "intensity": intensity,
+                "notes": notes or None,
+            },
+        )
+        if ok:
+            st.success("Detalhes do treino salvos.")
+            st.rerun()
+        else:
+            st.warning("Os detalhes do treino precisam de uma tabela específica no Supabase. O treino como feito/não feito continua funcionando.")
+            st.code("""create table if not exists public.workout_logs (
+  date date primary key,
+  workout_type text,
+  strength_split text,
+  duration_min integer,
+  distance_km numeric,
+  device_kcal integer,
+  intensity integer,
+  notes text
+);""", language="sql")
+
+    if workout:
+        summary = [workout.get("workout_type") or "Treino"]
+        if workout.get("strength_split"):
+            summary.append(workout["strength_split"])
+        if workout.get("duration_min"):
+            summary.append(f"{workout['duration_min']} min")
+        if workout.get("distance_km"):
+            summary.append(f"{float(workout['distance_km']):.1f} km")
+        st.markdown(f'<div class="meal-card"><div class="meal-name">Treino registrado</div><div class="meal-detail">{" · ".join(summary)}</div></div>', unsafe_allow_html=True)
 
 
 def page_bio_inner(target):
@@ -1066,18 +1225,25 @@ def build_context(days=14):
     meals = db.table("meals").select("date,meal_type,food_key,kcal,protein_g,carbs_g,fat_g").gte("date", start).lte("date", end_s).order("date").execute().data or []
     sleep = db.table("sleep_cpap").select("date,total_hours,ahi,energy_score,tiredness_score").gte("date", start).lte("date", end_s).order("date").execute().data or []
     checks = db.table("checklist_daily").select("date,item_key,done").gte("date", start).lte("date", end_s).order("date").execute().data or []
+    try:
+        workouts = db.table("workout_logs").select("*").gte("date", start).lte("date", end_s).order("date").execute().data or []
+    except Exception:
+        workouts = []
     bio = db.table("bioimpedance").select("*").order("date", desc=True).limit(1).execute().data or []
     labs = db.table("lab_results").select("*").order("date", desc=True).limit(1).execute().data or []
+    summary = period_summary(days)
     return f"""
 Contexto do usuário:
 - Homem, 34 anos, 174 cm.
 - Objetivo: emagrecer preservando massa magra.
 - Janela analisada: {start} até {end_s}.
+- Resumo determinístico do período: {json.dumps(summary, default=str)}
 
 Peso: {json.dumps(weights, default=str)}
 Refeições: {json.dumps(meals, default=str)}
 Sono: {json.dumps(sleep, default=str)}
 Checklist: {json.dumps(checks, default=str)}
+Treinos detalhados: {json.dumps(workouts, default=str)}
 Bio mais recente: {json.dumps(bio, default=str)}
 Exames mais recentes: {json.dumps(labs, default=str)}
 """
@@ -1085,14 +1251,24 @@ Exames mais recentes: {json.dumps(labs, default=str)}
 
 def page_ia():
     st.markdown('<div class="section-title">IA / perguntas</div>', unsafe_allow_html=True)
-    st.caption("A IA faz mais sentido para analisar período, comparar padrões e interpretar exames. A leitura do dia fica na tela Hoje.")
-    c1, c2 = st.columns(2)
+    st.caption("Aqui a IA faz mais sentido para analisar consistência, padrões de 7/15/30 dias e comparações entre rotina, sono e alimentação.")
+
+    c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button("Analisar últimos 7 dias", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "content": "Analise meus últimos 7 dias de forma direta e prática."})
+        if st.button("Analisar 7 dias", use_container_width=True):
+            st.session_state["analysis_days"] = 7
+            st.session_state.chat_history.append({"role": "user", "content": "Analise meus últimos 7 dias com foco em consistência, treino, alimentação e sono."})
     with c2:
-        if st.button("Onde estou errando?", use_container_width=True):
-            st.session_state.chat_history.append({"role": "user", "content": "Onde estou errando? O que devo corrigir primeiro?"})
+        if st.button("Analisar 15 dias", use_container_width=True):
+            st.session_state["analysis_days"] = 15
+            st.session_state.chat_history.append({"role": "user", "content": "Analise meus últimos 15 dias com foco em consistência, aderência e tendência."})
+    with c3:
+        if st.button("Analisar 30 dias", use_container_width=True):
+            st.session_state["analysis_days"] = 30
+            st.session_state.chat_history.append({"role": "user", "content": "Analise meus últimos 30 dias com foco em consistência e no que mais travou meu resultado."})
+
+    days = st.session_state.get("analysis_days", 7)
+    render_period_summary_card(period_summary(days))
 
     for msg in st.session_state.chat_history:
         if msg["role"] == "user":
@@ -1102,10 +1278,10 @@ def page_ia():
 
     if st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user":
         with st.spinner("Analisando seus dados..."):
-            ctx = build_context(14)
-            system = """Você é um assistente analítico de saúde pessoal. Seja direto, prático e nada coach. Use o contexto de período. Não repita exame antigo em toda resposta sem motivo. Não invente fatos. Estruture em: leitura objetiva, principal gargalo, próximo ajuste."""
+            ctx = build_context(days)
+            system = """Você é um assistente analítico de saúde pessoal. Seja direto, prático e nada coach. Foque em consistência, aderência, treino, sono, alimentação e padrões do período. Não repita exame antigo sem motivo. Não invente fatos. Estruture em: leitura objetiva, consistência do período, principal gargalo, próximo ajuste."""
             user = ctx + "\n\nPergunta do usuário: " + st.session_state.chat_history[-1]["content"]
-            result = ask_openai(system, user, max_tokens=500)
+            result = ask_openai(system, user, max_tokens=550)
             st.session_state.chat_history.append({"role": "assistant", "content": result})
             st.rerun()
 
