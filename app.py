@@ -138,6 +138,54 @@ st.markdown(
     .streamlit-expanderHeader {font-size: 15px; font-weight: 700;}
     .stButton > button {min-height: 42px; border-radius: 12px;}
     .stNumberInput input, .stTextInput input {font-size: 16px !important;}
+
+    .hero-grid {display:grid; grid-template-columns: 1.35fr 1fr; gap:12px; margin-bottom: 12px;}
+    .hero-card {
+        background: linear-gradient(135deg, rgba(20,32,53,0.98), rgba(16,23,38,0.98));
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 16px;
+        box-shadow: 0 18px 40px rgba(0,0,0,0.22);
+    }
+    .hero-kicker {font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--green); font-weight: 800; margin-bottom: 8px;}
+    .hero-main {font-size: 34px; line-height: 1; font-weight: 900; color: var(--text);}
+    .hero-sub {font-size: 13px; color: var(--muted); margin-top: 8px;}
+    .summary-chip-row {display:flex; gap:8px; flex-wrap:wrap; margin-top: 12px;}
+    .summary-chip {
+        background: rgba(132,182,255,0.10);
+        border: 1px solid rgba(132,182,255,0.18);
+        border-radius: 999px;
+        padding: 7px 10px;
+        font-size: 12px;
+        color: var(--text);
+    }
+    .stack-card {
+        background: rgba(18,25,43,0.96);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        margin-bottom: 12px;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+    }
+    .stack-title {font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); font-weight: 800;}
+    .stack-value {font-size: 26px; font-weight: 900; color: var(--text); margin-top: 8px;}
+    .stack-sub {font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.5;}
+    .period-grid {display:grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;}
+    .period-card {
+        background: rgba(18,25,43,0.96);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        padding: 14px;
+        min-height: 150px;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+    }
+    .period-card .top {font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--green); font-weight: 800;}
+    .period-card .big {font-size: 28px; margin-top: 8px;}
+    .period-card .small {font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.5;}
+    .legend-wrap {display:flex; gap:10px; flex-wrap:wrap; margin: 8px 0 2px;}
+    .legend-badge {display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background: rgba(24,34,56,0.96); border-radius:999px; padding:7px 10px; font-size:12px; color: var(--text);}
+    .nav-caption {font-size:12px; color: var(--muted); margin-top: 4px;}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -716,6 +764,64 @@ def macro_pills(kcal, prot, carb, fat):
     )
 
 
+def render_day_summary_band(current_weight, goal_weight, meals, checklist, sleep, workout):
+    routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
+    done_count = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
+    routine_text = f"{done_count}/{len(routine_items)} rotina" if routine_items else "rotina sem base"
+    trained = bool(checklist.get("treino", {}).get("done")) or bool((workout or {}).get("workout_type"))
+    treino_text = "treino feito" if trained else "sem treino"
+    sleep_hours = sleep.get("total_hours") if sleep else None
+    sleep_text = f"{float(sleep_hours):.1f}h sono" if sleep_hours else "sono pendente"
+    meal_text = f"{len(meals)} registros" if meals else "sem refeições"
+    remaining = None if current_weight is None else current_weight - goal_weight
+
+    left = '<div class="hero-card">'
+    left += '<div class="hero-kicker">Hoje</div>'
+    if current_weight is not None:
+        left += f'<div class="hero-main">{current_weight:.1f} kg</div>'
+        left += f'<div class="hero-sub">Meta {goal_weight:.0f} kg · faltam {remaining:.1f} kg para a meta cadastrada.</div>'
+    else:
+        left += '<div class="hero-main">Sem peso</div>'
+        left += '<div class="hero-sub">Registre o peso para manter o histórico e o gráfico consistentes.</div>'
+    left += '<div class="summary-chip-row">'
+    for label in [routine_text, meal_text, sleep_text, treino_text]:
+        left += f'<div class="summary-chip">{label}</div>'
+    left += '</div></div>'
+
+    if meals:
+        totals = meal_totals(meals)
+        right = '<div class="stack-card">'
+        right += '<div class="stack-title">Leitura rápida do dia</div>'
+        right += f'<div class="stack-value">{totals["kcal"]:.0f} kcal</div>'
+        right += f'<div class="stack-sub">Proteína {totals["prot"]:.0f} g · Carbo {totals["carb"]:.0f} g · Gordura {totals["fat"]:.0f} g.</div>'
+        right += '</div>'
+    else:
+        right = '<div class="stack-card">'
+        right += '<div class="stack-title">Leitura rápida do dia</div>'
+        right += '<div class="stack-value">abrir o dia</div>'
+        right += '<div class="stack-sub">Comece por peso, sono e a primeira refeição para o app conseguir ler melhor o contexto.</div>'
+        right += '</div>'
+
+    st.markdown(f'<div class="hero-grid">{left}{right}</div>', unsafe_allow_html=True)
+
+
+def render_period_cards():
+    summaries = [period_summary(7), period_summary(15), period_summary(30)]
+    cards = []
+    for s in summaries:
+        delta_txt = 'sem peso' if s['first_weight'] is None or s['last_weight'] is None else f"{s['first_weight']:.1f} → {s['last_weight']:.1f} kg"
+        card = '<div class="period-card">'
+        card += f'<div class="top">Últimos {s["days"]} dias</div>'
+        card += f'<div class="big">{s["avg_routine_adherence"]:.0f}%</div>'
+        card += '<div class="small">Rotina média</div>'
+        card += f'<div class="small">Treino em {s["treino_days"]}/{s["days"]} dias</div>'
+        card += f'<div class="small">Sono em {s["sleep_days"]}/{s["days"]} dias</div>'
+        card += f'<div class="small">{delta_txt}</div>'
+        card += '</div>'
+        cards.append(card)
+    st.markdown('<div class="period-grid">' + ''.join(cards) + '</div>', unsafe_allow_html=True)
+
+
 def date_bar():
     today = local_today()
     d = st.session_state.sel_date
@@ -744,7 +850,7 @@ def date_bar():
 
 
 def nav_bar():
-    st.markdown("---")
+    st.markdown("<div class='nav-caption'>Navegação principal</div>", unsafe_allow_html=True)
     cols = st.columns(5)
     items = [
         ("hoje", "Hoje"),
@@ -759,6 +865,7 @@ def nav_bar():
             if st.button(label, key=f"nav_{key}", use_container_width=True, type="primary" if active else "secondary"):
                 st.session_state.page = key
                 st.rerun()
+
 
 
 def render_graph(end_date, goal_weight):
@@ -781,10 +888,16 @@ def page_hoje():
     target = date_bar()
     goals = get_goals()
     goal_weight = float(goals.get("weight", {}).get("target_value", 90))
+    current_weight = get_weight(target)
+    sleep = get_sleep(target)
+    workout = get_workout(target)
+    checklist = get_checklist(target)
+    meals = get_meals(target)
 
     st.markdown('<div class="section-title">Resumo do dia</div>', unsafe_allow_html=True)
-    current_weight = get_weight(target)
-    c1, c2 = st.columns([2.4, 1])
+    render_day_summary_band(current_weight, goal_weight, meals, checklist, sleep, workout)
+
+    c1, c2 = st.columns([2.2, 1])
     with c1:
         pv = float(current_weight or 143.0)
         weight_input = st.number_input("Peso do dia", 50.0, 250.0, pv, 0.1, format="%.1f", key="today_weight")
@@ -793,20 +906,14 @@ def page_hoje():
         if st.button("Salvar peso", use_container_width=True, key="save_today_weight"):
             save_weight(target, weight_input)
             st.rerun()
-    if current_weight is not None:
-        remaining = current_weight - goal_weight
-        st.markdown(f'<div class="card"><div class="big">{current_weight:.1f} kg</div><div class="muted">Meta {goal_weight:.0f} kg · faltam {remaining:.1f} kg</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">Gráfico</div>', unsafe_allow_html=True)
     render_graph(st.session_state.sel_date, goal_weight)
 
     st.markdown('<div class="section-title">Sono da noite anterior</div>', unsafe_allow_html=True)
-    sleep = get_sleep(target)
     page_sono_quick(target, sleep)
 
-    workout = get_workout(target)
-    checklist = get_checklist(target)
-    trained = bool(checklist.get("treino", {}).get("done"))
+    trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
     st.markdown('<div class="section-title">Treino do dia</div>', unsafe_allow_html=True)
     if trained:
         summary = []
@@ -821,10 +928,9 @@ def page_hoje():
         detail = " · ".join(summary) if summary else "Treino marcado hoje."
         st.markdown(f'<div class="meal-card"><div class="meal-name">Treino registrado</div><div class="meal-detail">{detail}</div></div>', unsafe_allow_html=True)
     else:
-        st.markdown('<div class="meal-card"><div class="meal-name">Sem treino marcado</div><div class="meal-detail">Se não for musculação hoje, vale pelo menos uma caminhada de 20–30 min, cardio leve ou mobilidade para não zerar o dia.</div></div>', unsafe_allow_html=True)
+        st.markdown('<div class="meal-card"><div class="meal-name">Sem treino marcado</div><div class="meal-detail">Se musculação não entrar hoje, escolha um mínimo viável agora: caminhada de 20–30 min, cardio leve ou mobilidade. Melhor um dia fraco do que um dia zerado.</div></div>', unsafe_allow_html=True)
 
     st.markdown('<div class="section-title">Alimentação do dia</div>', unsafe_allow_html=True)
-    meals = get_meals(target)
     totals = meal_totals(meals)
     macro_pills(totals["kcal"], totals["prot"], totals["carb"], totals["fat"])
     klass, label = food_status_class(totals["kcal"], totals["prot"], goals)
@@ -1285,6 +1391,28 @@ def page_bio_inner(target):
 # ==================================================
 def page_historico():
     st.markdown('<div class="section-title">Histórico / calendário</div>', unsafe_allow_html=True)
+    st.markdown('<div class="card card-tight"><strong>Leitura rápida do histórico</strong><div class="muted">Aqui você enxerga consistência recente e pode abrir qualquer dia para corrigir ou preencher retroativamente.</div></div>', unsafe_allow_html=True)
+    render_period_cards()
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button("Abrir análise 7 dias", use_container_width=True, key="hist_go_7"):
+            st.session_state["analysis_days"] = 7
+            st.session_state.page = "ia"
+            st.rerun()
+    with c2:
+        if st.button("Abrir análise 15 dias", use_container_width=True, key="hist_go_15"):
+            st.session_state["analysis_days"] = 15
+            st.session_state.page = "ia"
+            st.rerun()
+    with c3:
+        if st.button("Abrir análise 30 dias", use_container_width=True, key="hist_go_30"):
+            st.session_state["analysis_days"] = 30
+            st.session_state.page = "ia"
+            st.rerun()
+
+    st.markdown('<div class="legend-wrap"><div class="legend-badge">🟢 dia bem preenchido</div><div class="legend-badge">🟡 dia parcial</div><div class="legend-badge">🔴 quase vazio</div><div class="legend-badge">⚫ sem registro</div></div>', unsafe_allow_html=True)
+
     today = local_today()
     months = []
     base = today.replace(day=1)
@@ -1316,7 +1444,7 @@ def page_historico():
                     st.session_state.sel_date = d
                     st.session_state.page = "hoje"
                     st.rerun()
-    st.markdown("<div class='calendar-note'>Clique em um dia para abrir, completar ou corrigir retroativamente.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='calendar-note'>Clique em um dia para abrir, completar ou corrigir retroativamente. O histórico foi pensado para não te punir se você esquecer de preencher no dia.</div>", unsafe_allow_html=True)
 
 
 # ==================================================
@@ -1357,6 +1485,7 @@ Exames mais recentes: {json.dumps(labs, default=str)}
 def page_ia():
     st.markdown('<div class="section-title">IA / perguntas</div>', unsafe_allow_html=True)
     st.caption("Aqui a IA faz mais sentido para analisar consistência, aderência de treino, sono, alimentação e tendência do período.")
+    render_period_cards()
 
     c1, c2, c3 = st.columns(3)
     with c1:
