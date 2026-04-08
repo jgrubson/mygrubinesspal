@@ -270,7 +270,15 @@ STRATEGY_TEXT = {
     "copy": "O foco do app agora é déficit controlado, proteína alta, treino de força, hidratação e sono. O objetivo não é só descer peso; é reduzir gordura preservando massa magra e diminuindo o risco de flacidez por perda mal conduzida.",
     "focus": "Sair dos 3 dígitos com consistência, sem transformar o processo em restrição caótica.",
 }
-
+PROJECT_PROFILE = {
+    "start_date": date(2026, 3, 25),
+    "start_weight": 143.7,
+    "goal_weight_intermediate": 99.9,
+    "goal_weight_final": 90.0,
+    "expected_loss_per_week_min": 0.4,
+    "expected_loss_per_week_ideal": 0.8,
+    "expected_loss_per_week_max_safe": 1.2,
+}
 LOCAL_FOOD_LIBRARY = [
     {"food_key": "agua", "name": "Água", "default_portion_g": 300, "kcal_per_100g": 0, "protein_per_100g": 0, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
     {"food_key": "cafe_puro", "name": "Café puro", "default_portion_g": 100, "kcal_per_100g": 2, "protein_per_100g": 0.3, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
