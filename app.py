@@ -1224,20 +1224,51 @@ def render_graph(end_date, goal_weight):
 # ==================================================
 def page_hoje():
     target = date_bar()
-    goals = get_goals()
-    goal_weight = float(goals.get("weight", {}).get("target_value", 90))
-    current_weight = get_weight(target)
-    sleep = get_sleep(target)
-    workout = get_workout(target)
-    hydration = get_hydration(target)
-    checklist = get_checklist(target)
-    meals = get_meals(target)
+goals = get_goals()
+goal_weight = float(goals.get("weight", {}).get("target_value", 90))
+current_weight = get_weight(target)
+curve_info = get_weight_curve_status(current_weight, target)
+sleep = get_sleep(target)
+workout = get_workout(target)
+hydration = get_hydration(target)
+checklist = get_checklist(target)
+meals = get_meals(target)
 
     st.markdown('<div class="section-title">Resumo do dia</div>', unsafe_allow_html=True)
     render_day_summary_band(current_weight, goal_weight, meals, checklist, sleep, workout)
     render_strategy_current(goals, current_weight=current_weight)
 
+    curve_class_map = {
+        "sem_peso": "b",
+        "claramente_atrasado": "r",
+        "queda_rapida_demais": "y",
+        "na_curva_ideal": "g",
+        "dentro_da_faixa": "b",
+    }
+
+    curve_class = curve_class_map.get(curve_info["status"], "b")
+
+    st.markdown(
+        f"""
+        <div class="card card-tight">
+            <div class="meal-name">Curva de peso</div>
+            <div class="meal-detail">
+                Status: <span class="status {curve_class}">{curve_info['label']}</span>
+            </div>
+            <div class="meal-detail" style="margin-top:8px;">
+                Projeção para hoje · mínimo: {curve_info['projected_min']:.1f} kg · ideal: {curve_info['projected_ideal']:.1f} kg · máximo seguro: {curve_info['projected_max_safe']:.1f} kg
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     c1, c2 = st.columns([2.2, 1])
+
+
+
+    c1, c2 = st.columns([2.2, 1])
+
     with c1:
         pv = float(current_weight or 143.0)
         weight_input = st.number_input("Peso do dia", 50.0, 250.0, pv, 0.1, format="%.1f", key="today_weight")
