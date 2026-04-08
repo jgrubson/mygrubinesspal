@@ -1207,16 +1207,78 @@ def nav_bar():
 
 
 def render_graph(end_date, goal_weight):
-    hist = get_weight_history(30, end_date=end_date)
-    if not hist:
-        st.info("Ainda não há histórico suficiente de peso para o gráfico.")
-        return
-    df = pd.DataFrame(hist)
-    df["date"] = pd.to_datetime(df["date"])
-    df["weight_kg"] = df["weight_kg"].astype(float)
-    df["meta"] = goal_weight
-    df["media_7d"] = df["weight_kg"].rolling(7, min_periods=1).mean()
-    st.line_chart(df.set_index("date")[["weight_kg", "meta", "media_7d"]], height=220, use_container_width=True)
+    if isinstance(end_date, str):
+        end_date = date.fromisoformat(end_date)
+
+    project_start = PROJECT_PROFILE["start_date"]
+    if end_date < project_start:
+        project_start = end_date
+
+    total_days = max(1, (end_date - project_start).days + 1)
+    hist = get_weight_history(total_days, end_date=end_date)
+
+    df = pd.DataFrame({
+        "date": pd.date_range(start=project_start, end=end_date, freq="D")
+    })
+
+    df["curva_min"] = df["date"].apply(
+        lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_min"])
+    )
+    df["curva_ideal"] = df["date"].apply(
+        lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_ideal"])
+    )
+    df["curva_max_segura"] = df["date"].apply(
+        lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_max_safe"])
+    )
+
+    df["meta_intermediaria"] = float(goal_weight)
+    df["meta_final"] = PROJECT_PROFILE["goal_weight_final"]
+    df["peso_inicial_ref"] = PROJECT_PROFILE["start_weight"]
+
+    if hist:
+        hist_df = pd.DataFrame(hist)
+        hist_df["date"] = pd.to_datetime(hist_df["date"])
+        hist_df["weight_kg"] = hist_df["weight_kg"].astype(float)
+        hist_df = hist_df.groupby("date", as_index=False)["weight_kg"].last()
+        df = df.merge(
+            hist_df.rename(columns={"weight_kg": "peso_real"}),
+            on="date",
+            how="left",
+        )
+    else:
+        df["peso_real"] = float("nan")
+
+    st.line_chart(
+        df.set_index("date")[
+            [
+                "peso_real",
+                "curva_ideal",
+                "curva_min",
+                "curva_max_segura",
+                "meta_intermediaria",
+                "meta_final",
+                "peso_inicial_ref",
+            ]
+        ],
+        height=280,
+        use_container_width=True,
+    )
+
+    if hist:
+        last_real = float(df["peso_real"].dropna().iloc[-1])
+        st.caption(
+            f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · "
+            f"meta intermediária {float(goal_weight):.1f} kg · "
+            f"meta final {PROJECT_PROFILE['goal_weight_final']:.1f} kg · "
+            f"último peso real {last_real:.1f} kg."
+        )
+    else:
+        st.caption(
+            f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · "
+            f"meta intermediária {float(goal_weight):.1f} kg · "
+            f"meta final {PROJECT_PROFILE['goal_weight_final']:.1f} kg. "
+            f"A linha real aparece conforme você for registrando o peso."
+        )
 
 
 # ==================================================
