@@ -1224,15 +1224,15 @@ def render_graph(end_date, goal_weight):
 # ==================================================
 def page_hoje():
     target = date_bar()
-goals = get_goals()
-goal_weight = float(goals.get("weight", {}).get("target_value", 90))
-current_weight = get_weight(target)
-curve_info = get_weight_curve_status(current_weight, target)
-sleep = get_sleep(target)
-workout = get_workout(target)
-hydration = get_hydration(target)
-checklist = get_checklist(target)
-meals = get_meals(target)
+    goals = get_goals()
+    goal_weight = float(goals.get("weight", {}).get("target_value", 90))
+    current_weight = get_weight(target)
+    curve_info = get_weight_curve_status(current_weight, target)
+    sleep = get_sleep(target)
+    workout = get_workout(target)
+    hydration = get_hydration(target)
+    checklist = get_checklist(target)
+    meals = get_meals(target)
 
     st.markdown('<div class="section-title">Resumo do dia</div>', unsafe_allow_html=True)
     render_day_summary_band(current_weight, goal_weight, meals, checklist, sleep, workout)
@@ -1262,7 +1262,6 @@ meals = get_meals(target)
         """,
         unsafe_allow_html=True,
     )
-
     c1, c2 = st.columns([2.2, 1])
 
 
