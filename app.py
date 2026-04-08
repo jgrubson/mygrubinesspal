@@ -1224,10 +1224,11 @@ def render_graph(end_date, goal_weight):
 # ==================================================
 def page_hoje():
     target = date_bar()
+    target_date = st.session_state.sel_date
     goals = get_goals()
     goal_weight = float(goals.get("weight", {}).get("target_value", 90))
     current_weight = get_weight(target)
-    curve_info = get_weight_curve_status(current_weight, target)
+    curve_info = get_weight_curve_status(current_weight, target_date)
     sleep = get_sleep(target)
     workout = get_workout(target)
     hydration = get_hydration(target)
@@ -1262,9 +1263,6 @@ def page_hoje():
         """,
         unsafe_allow_html=True,
     )
-    c1, c2 = st.columns([2.2, 1])
-
-
 
     c1, c2 = st.columns([2.2, 1])
 
