@@ -5,6 +5,7 @@ import calendar
 import json
 
 import pandas as pd
+import altair as alt
 import streamlit as st
 from openai import OpenAI
 from supabase import create_client
@@ -716,8 +717,8 @@ def target_snapshot(goals):
         "carb": float(goals.get("carb_daily", {}).get("target_value", 190)),
         "fat": float(goals.get("fat_daily", {}).get("target_value", 70)),
         "water_ml": float(goals.get("water_daily_ml", {}).get("target_value", 4000)),
-        "weight_goal": float(goals.get("weight", {}).get("target_value", 99.9)),
-        "weight_long": float(goals.get("weight_long_term", {}).get("target_value", 90)),
+        "weight_goal": float(PROJECT_PROFILE["goal_weight_intermediate"]),
+        "weight_long": float(PROJECT_PROFILE["goal_weight_final"]),
     }
 
 
@@ -1262,65 +1263,98 @@ def render_graph(end_date, goal_weight):
     df = pd.DataFrame({
         "date": pd.date_range(start=project_start, end=end_date, freq="D")
     })
-
     df["curva_min"] = df["date"].apply(
         lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_min"])
     )
     df["curva_ideal"] = df["date"].apply(
         lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_ideal"])
     )
-    df["curva_max_segura"] = df["date"].apply(
+    df["curva_max"] = df["date"].apply(
         lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_max_safe"])
     )
-
-    df["meta_intermediaria"] = float(goal_weight)
-    df["meta_final"] = PROJECT_PROFILE["goal_weight_final"]
-    df["peso_inicial_ref"] = PROJECT_PROFILE["start_weight"]
 
     if hist:
         hist_df = pd.DataFrame(hist)
         hist_df["date"] = pd.to_datetime(hist_df["date"])
         hist_df["weight_kg"] = hist_df["weight_kg"].astype(float)
         hist_df = hist_df.groupby("date", as_index=False)["weight_kg"].last()
-        df = df.merge(
-            hist_df.rename(columns={"weight_kg": "peso_real"}),
-            on="date",
-            how="left",
-        )
+        df = df.merge(hist_df.rename(columns={"weight_kg": "peso_real"}), on="date", how="left")
     else:
         df["peso_real"] = float("nan")
 
-    st.line_chart(
-        df.set_index("date")[
-            [
-                "peso_real",
-                "curva_ideal",
-                "curva_min",
-                "curva_max_segura",
-                "meta_intermediaria",
-                "meta_final",
-                "peso_inicial_ref",
-            ]
-        ],
-        height=280,
-        use_container_width=True,
+    monthly_targets = pd.DataFrame(get_monthly_target_rows(end_date))
+    if not monthly_targets.empty:
+        monthly_targets["date"] = pd.to_datetime(monthly_targets["date"])
+
+    y_min = min(float(df["curva_max"].min()), float(df["curva_min"].min()), float(PROJECT_PROFILE["goal_weight_final"])) - 3
+    y_max = max(float(df["curva_min"].max()), float(PROJECT_PROFILE["start_weight"])) + 3
+
+    base = alt.Chart(df).encode(
+        x=alt.X("date:T", title="Data"),
+        y=alt.Y(
+            "value:Q",
+            title="Peso (kg)",
+            scale=alt.Scale(domain=[y_min, y_max])
+        )
     )
 
-    if hist:
-        last_real = float(df["peso_real"].dropna().iloc[-1])
+    band = alt.Chart(df).mark_area(opacity=0.18).encode(
+        x=alt.X("date:T", title="Data"),
+        y=alt.Y("curva_min:Q", title="Peso (kg)", scale=alt.Scale(domain=[y_min, y_max])),
+        y2="curva_max:Q"
+    )
+
+    ideal_line = alt.Chart(df).mark_line(strokeWidth=3).encode(
+        x="date:T",
+        y=alt.Y("curva_ideal:Q", scale=alt.Scale(domain=[y_min, y_max])),
+        tooltip=[alt.Tooltip("date:T", title="Data"), alt.Tooltip("curva_ideal:Q", title="Curva ideal", format=".1f")]
+    )
+
+    real_line = alt.Chart(df.dropna(subset=["peso_real"]))        .mark_line(point=True, strokeWidth=3)        .encode(
+            x="date:T",
+            y=alt.Y("peso_real:Q", scale=alt.Scale(domain=[y_min, y_max])),
+            tooltip=[alt.Tooltip("date:T", title="Data"), alt.Tooltip("peso_real:Q", title="Peso real", format=".1f")]
+        )
+
+    chart = (band + ideal_line + real_line).properties(height=300)
+
+    if not monthly_targets.empty:
+        monthly_points = alt.Chart(monthly_targets).mark_circle(size=80, opacity=0.9).encode(
+            x="date:T",
+            y=alt.Y("target_weight:Q", scale=alt.Scale(domain=[y_min, y_max])),
+            tooltip=[alt.Tooltip("month_label:N", title="Mês"), alt.Tooltip("target_weight:Q", title="Meta ideal", format=".1f")]
+        )
+        monthly_labels = alt.Chart(monthly_targets).mark_text(dy=-10, fontSize=11).encode(
+            x="date:T",
+            y=alt.Y("target_weight:Q", scale=alt.Scale(domain=[y_min, y_max])),
+            text=alt.Text("target_weight:Q", format=".1f")
+        )
+        chart = chart + monthly_points + monthly_labels
+
+    st.altair_chart(chart.interactive(), use_container_width=True)
+
+    current_real = df["peso_real"].dropna()
+    if not current_real.empty:
+        last_real = float(current_real.iloc[-1])
+        curve_info = get_weight_curve_status(last_real, end_date)
         st.caption(
             f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · "
-            f"meta intermediária {float(goal_weight):.1f} kg · "
-            f"meta final {PROJECT_PROFILE['goal_weight_final']:.1f} kg · "
-            f"último peso real {last_real:.1f} kg."
+            f"peso atual {last_real:.1f} kg · "
+            f"curva ideal hoje {curve_info['projected_ideal']:.1f} kg · "
+            f"status: {curve_info['label']}."
         )
     else:
         st.caption(
             f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · "
-            f"meta intermediária {float(goal_weight):.1f} kg · "
-            f"meta final {PROJECT_PROFILE['goal_weight_final']:.1f} kg. "
-            f"A linha real aparece conforme você for registrando o peso."
+            f"sem linha real suficiente ainda. Registre o peso para comparar com a curva esperada."
         )
+
+    if not monthly_targets.empty:
+        cols = st.columns(min(4, len(monthly_targets)))
+        for i, (_, row) in enumerate(monthly_targets.tail(4).iterrows()):
+            with cols[i % len(cols)]:
+                st.metric(row["month_label"], f"{row['target_weight']:.1f} kg")
+
 
 
 # ==================================================
@@ -1330,7 +1364,7 @@ def page_hoje():
     target = date_bar()
     target_date = st.session_state.sel_date
     goals = get_goals()
-    goal_weight = float(goals.get("weight", {}).get("target_value", 90))
+    goal_weight = float(PROJECT_PROFILE["goal_weight_intermediate"])
     current_weight = get_weight(target)
     curve_info = get_weight_curve_status(current_weight, target_date)
     sleep = get_sleep(target)
@@ -1673,7 +1707,7 @@ def page_sono_inner(target):
 def page_peso_inner(target):
     st.markdown('<div class="section-title">Peso e medidas</div>', unsafe_allow_html=True)
     goals = get_goals()
-    goal_weight = float(goals.get("weight", {}).get("target_value", 90))
+    goal_weight = float(PROJECT_PROFILE["goal_weight_intermediate"])
     period = st.selectbox("Período do gráfico", ["30 dias", "60 dias", "90 dias", "Tudo"], key="weight_period")
     days_map = {"30 dias": 30, "60 dias": 60, "90 dias": 90, "Tudo": 3650}
     hist = get_weight_history(days_map[period], end_date=st.session_state.sel_date)
