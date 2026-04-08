@@ -279,6 +279,59 @@ PROJECT_PROFILE = {
     "expected_loss_per_week_ideal": 0.8,
     "expected_loss_per_week_max_safe": 1.2,
 }
+def clamp_weight_to_goal(weight_value: float) -> float:
+    return max(PROJECT_PROFILE["goal_weight_final"], round(weight_value, 1))
+
+
+def get_projected_weight(date_value, weekly_loss):
+    start_date = PROJECT_PROFILE["start_date"]
+    start_weight = PROJECT_PROFILE["start_weight"]
+
+    if date_value <= start_date:
+        return start_weight
+
+    days_elapsed = (date_value - start_date).days
+    weeks_elapsed = days_elapsed / 7
+    projected = start_weight - (weeks_elapsed * weekly_loss)
+    return clamp_weight_to_goal(projected)
+
+
+def get_weight_curve_status(actual_weight, date_value):
+    if actual_weight is None:
+        return {
+            "status": "sem_peso",
+            "label": "sem peso registrado",
+            "projected_min": get_projected_weight(date_value, PROJECT_PROFILE["expected_loss_per_week_min"]),
+            "projected_ideal": get_projected_weight(date_value, PROJECT_PROFILE["expected_loss_per_week_ideal"]),
+            "projected_max_safe": get_projected_weight(date_value, PROJECT_PROFILE["expected_loss_per_week_max_safe"]),
+        }
+
+    projected_min = get_projected_weight(date_value, PROJECT_PROFILE["expected_loss_per_week_min"])
+    projected_ideal = get_projected_weight(date_value, PROJECT_PROFILE["expected_loss_per_week_ideal"])
+    projected_max_safe = get_projected_weight(date_value, PROJECT_PROFILE["expected_loss_per_week_max_safe"])
+
+    tolerance = 0.5
+
+    if actual_weight > projected_min + tolerance:
+        status = "claramente_atrasado"
+        label = "acima da faixa projetada"
+    elif actual_weight < projected_max_safe - tolerance:
+        status = "queda_rapida_demais"
+        label = "queda rápida demais"
+    elif abs(actual_weight - projected_ideal) <= tolerance:
+        status = "na_curva_ideal"
+        label = "na curva ideal"
+    else:
+        status = "dentro_da_faixa"
+        label = "dentro da faixa"
+
+    return {
+        "status": status,
+        "label": label,
+        "projected_min": projected_min,
+        "projected_ideal": projected_ideal,
+        "projected_max_safe": projected_max_safe,
+    }
 LOCAL_FOOD_LIBRARY = [
     {"food_key": "agua", "name": "Água", "default_portion_g": 300, "kcal_per_100g": 0, "protein_per_100g": 0, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
     {"food_key": "cafe_puro", "name": "Café puro", "default_portion_g": 100, "kcal_per_100g": 2, "protein_per_100g": 0.3, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
