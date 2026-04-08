@@ -332,6 +332,48 @@ def get_weight_curve_status(actual_weight, date_value):
         "projected_ideal": projected_ideal,
         "projected_max_safe": projected_max_safe,
     }
+
+
+def get_monthly_target_rows(end_date):
+    if isinstance(end_date, str):
+        end_date = date.fromisoformat(end_date)
+
+    start_date = PROJECT_PROFILE["start_date"]
+    rows = []
+
+    cursor = date(start_date.year, start_date.month, 1)
+
+    while cursor <= end_date:
+        if cursor.month == 12:
+            month_end = date(cursor.year, 12, 31)
+        else:
+            month_end = date(cursor.year, cursor.month + 1, 1) - timedelta(days=1)
+
+        if month_end < start_date:
+            if cursor.month == 12:
+                cursor = date(cursor.year + 1, 1, 1)
+            else:
+                cursor = date(cursor.year, cursor.month + 1, 1)
+            continue
+
+        ref_date = min(month_end, end_date)
+        ideal_weight = get_projected_weight(ref_date, PROJECT_PROFILE["expected_loss_per_week_ideal"])
+
+        rows.append(
+            {
+                "month_label": ref_date.strftime("%m/%Y"),
+                "date": ref_date,
+                "target_weight": round(ideal_weight, 1),
+            }
+        )
+
+        if cursor.month == 12:
+            cursor = date(cursor.year + 1, 1, 1)
+        else:
+            cursor = date(cursor.year, cursor.month + 1, 1)
+
+    return rows
+    
 LOCAL_FOOD_LIBRARY = [
     {"food_key": "agua", "name": "Água", "default_portion_g": 300, "kcal_per_100g": 0, "protein_per_100g": 0, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
     {"food_key": "cafe_puro", "name": "Café puro", "default_portion_g": 100, "kcal_per_100g": 2, "protein_per_100g": 0.3, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
