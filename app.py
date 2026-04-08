@@ -55,7 +55,7 @@ st.markdown(
         --blue: #84b6ff;
     }
     html, body, [data-testid="stAppViewContainer"] {
-        background: linear-gradient(180deg, #09101d 0%, #0d1220 100%);
+        background: linear-gradient(190deg, #09101d 0%, #0d1220 100%);
         color: var(--text);
     }
     .top-date {
@@ -186,6 +186,33 @@ st.markdown(
     .legend-badge {display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); background: rgba(24,34,56,0.96); border-radius:999px; padding:7px 10px; font-size:12px; color: var(--text);}
     .nav-caption {font-size:12px; color: var(--muted); margin-top: 4px;}
 
+
+    .strategy-grid {display:grid; grid-template-columns: 1.15fr 1fr; gap:12px; margin-bottom: 12px;}
+    .strategy-card {
+        background: linear-gradient(135deg, rgba(16,29,49,0.98), rgba(15,20,32,0.98));
+        border: 1px solid var(--line);
+        border-radius: 20px;
+        padding: 16px;
+        box-shadow: 0 16px 34px rgba(0,0,0,0.18);
+        margin-bottom: 12px;
+    }
+    .strategy-kicker {font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--yellow); font-weight: 800; margin-bottom: 8px;}
+    .strategy-title {font-size: 24px; font-weight: 900; line-height: 1.1; color: var(--text);}
+    .strategy-copy {font-size: 13px; color: var(--muted); line-height: 1.6; margin-top: 10px;}
+    .target-grid {display:grid; grid-template-columns: repeat(2,1fr); gap: 10px; margin-top: 12px;}
+    .target-card {background: rgba(24,34,56,0.96); border: 1px solid var(--line); border-radius: 16px; padding: 12px;}
+    .target-label {font-size: 11px; text-transform: uppercase; letter-spacing: 0.9px; color: var(--muted);}
+    .target-value {font-size: 22px; font-weight: 900; margin-top: 4px; color: var(--text);}
+    .target-sub {font-size: 12px; color: var(--muted); margin-top: 4px; line-height: 1.5;}
+    .hydration-wrap {display:grid; grid-template-columns: 1.1fr 1fr; gap:12px; margin-bottom: 12px;}
+    .progress-bar {width:100%; height: 12px; background: rgba(255,255,255,0.06); border-radius: 999px; overflow:hidden; margin-top: 10px;}
+    .progress-fill {height: 100%; background: linear-gradient(90deg, #5ac8fa, #69d3a6); border-radius: 999px;}
+    .tag-row {display:flex; gap:8px; flex-wrap:wrap; margin-top: 12px;}
+    .tag {display:inline-flex; align-items:center; border-radius:999px; border:1px solid var(--line); background: rgba(255,255,255,0.04); padding: 7px 10px; font-size:12px; color: var(--text);}
+    .food-search-box {background: rgba(24,34,56,0.65); border: 1px dashed var(--line); border-radius: 14px; padding: 12px; margin-top: 10px;}
+    .soft-note {font-size: 12px; color: var(--muted); line-height: 1.55;}
+    .custom-estimate {background: rgba(13,42,38,0.85); border:1px solid #2f6f5d; border-radius: 14px; padding: 12px; margin-top: 10px;}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -228,9 +255,78 @@ def safe_execute(fn):
         return False, str(e)
 
 
+DEFAULT_GOALS = {
+    "weight": {"metric": "weight", "target_value": 99.9, "label": "meta intermediária"},
+    "weight_long_term": {"metric": "weight_long_term", "target_value": 90.0, "label": "meta longa"},
+    "kcal_daily": {"metric": "kcal_daily", "target_value": 2400, "label": "calorias"},
+    "protein_daily": {"metric": "protein_daily", "target_value": 190, "label": "proteína"},
+    "carb_daily": {"metric": "carb_daily", "target_value": 190, "label": "carboidratos"},
+    "fat_daily": {"metric": "fat_daily", "target_value": 70, "label": "gorduras"},
+    "water_daily_ml": {"metric": "water_daily_ml", "target_value": 4000, "label": "água"},
+}
+
+STRATEGY_TEXT = {
+    "title": "Perder gordura sem desmontar sua estrutura.",
+    "copy": "O foco do app agora é déficit controlado, proteína alta, treino de força, hidratação e sono. O objetivo não é só descer peso; é reduzir gordura preservando massa magra e diminuindo o risco de flacidez por perda mal conduzida.",
+    "focus": "Sair dos 3 dígitos com consistência, sem transformar o processo em restrição caótica.",
+}
+
+LOCAL_FOOD_LIBRARY = [
+    {"food_key": "agua", "name": "Água", "default_portion_g": 300, "kcal_per_100g": 0, "protein_per_100g": 0, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
+    {"food_key": "cafe_puro", "name": "Café puro", "default_portion_g": 100, "kcal_per_100g": 2, "protein_per_100g": 0.3, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
+    {"food_key": "coca_zero_lata", "name": "Coca-Cola Zero lata", "default_portion_g": 350, "kcal_per_100g": 0.3, "protein_per_100g": 0, "carbs_per_100g": 0.1, "fat_per_100g": 0, "active": True},
+    {"food_key": "refrigerante_normal_lata", "name": "Refrigerante normal lata", "default_portion_g": 350, "kcal_per_100g": 42, "protein_per_100g": 0, "carbs_per_100g": 10.6, "fat_per_100g": 0, "active": True},
+    {"food_key": "suco_laranja", "name": "Suco de laranja", "default_portion_g": 300, "kcal_per_100g": 45, "protein_per_100g": 0.7, "carbs_per_100g": 10.4, "fat_per_100g": 0.2, "active": True},
+    {"food_key": "ovo_mexido", "name": "Ovo mexido", "default_portion_g": 100, "kcal_per_100g": 148, "protein_per_100g": 10.5, "carbs_per_100g": 1.6, "fat_per_100g": 11.2, "active": True},
+    {"food_key": "tapioca", "name": "Tapioca", "default_portion_g": 100, "kcal_per_100g": 160, "protein_per_100g": 0.2, "carbs_per_100g": 39, "fat_per_100g": 0.1, "active": True},
+    {"food_key": "granola", "name": "Granola", "default_portion_g": 30, "kcal_per_100g": 430, "protein_per_100g": 10, "carbs_per_100g": 64, "fat_per_100g": 14, "active": True},
+    {"food_key": "maca", "name": "Maçã", "default_portion_g": 130, "kcal_per_100g": 52, "protein_per_100g": 0.3, "carbs_per_100g": 14, "fat_per_100g": 0.2, "active": True},
+    {"food_key": "pasta_amendoim", "name": "Pasta de amendoim", "default_portion_g": 15, "kcal_per_100g": 588, "protein_per_100g": 25, "carbs_per_100g": 20, "fat_per_100g": 50, "active": True},
+    {"food_key": "frango_desfiado", "name": "Frango desfiado", "default_portion_g": 120, "kcal_per_100g": 163, "protein_per_100g": 31, "carbs_per_100g": 0, "fat_per_100g": 3.6, "active": True},
+    {"food_key": "tilapia", "name": "Tilápia", "default_portion_g": 120, "kcal_per_100g": 128, "protein_per_100g": 26, "carbs_per_100g": 0, "fat_per_100g": 2.7, "active": True},
+    {"food_key": "atum_lata", "name": "Atum em lata", "default_portion_g": 120, "kcal_per_100g": 116, "protein_per_100g": 26, "carbs_per_100g": 0, "fat_per_100g": 1.0, "active": True},
+    {"food_key": "batata_doce", "name": "Batata-doce cozida", "default_portion_g": 120, "kcal_per_100g": 86, "protein_per_100g": 1.6, "carbs_per_100g": 20, "fat_per_100g": 0.1, "active": True},
+    {"food_key": "farofa", "name": "Farofa", "default_portion_g": 30, "kcal_per_100g": 410, "protein_per_100g": 2.5, "carbs_per_100g": 70, "fat_per_100g": 12, "active": True},
+    {"food_key": "pizza_mucarela_fatia", "name": "Pizza de muçarela (fatia)", "default_portion_g": 120, "kcal_per_100g": 285, "protein_per_100g": 12, "carbs_per_100g": 31, "fat_per_100g": 13, "active": True},
+    {"food_key": "pizza_calabresa_fatia", "name": "Pizza de calabresa (fatia)", "default_portion_g": 120, "kcal_per_100g": 296, "protein_per_100g": 12, "carbs_per_100g": 28, "fat_per_100g": 15, "active": True},
+    {"food_key": "miojo_preparado", "name": "Miojo preparado", "default_portion_g": 160, "kcal_per_100g": 188, "protein_per_100g": 4.2, "carbs_per_100g": 25.5, "fat_per_100g": 8.3, "active": True},
+    {"food_key": "hamburguer_artesanal", "name": "Hambúrguer artesanal", "default_portion_g": 220, "kcal_per_100g": 250, "protein_per_100g": 14, "carbs_per_100g": 18, "fat_per_100g": 14, "active": True},
+    {"food_key": "batata_frita", "name": "Batata frita", "default_portion_g": 100, "kcal_per_100g": 312, "protein_per_100g": 3.4, "carbs_per_100g": 41, "fat_per_100g": 15, "active": True},
+    {"food_key": "big_mac", "name": "Big Mac", "default_portion_g": 215, "kcal_per_100g": 257, "protein_per_100g": 12.8, "carbs_per_100g": 20, "fat_per_100g": 15, "active": True},
+    {"food_key": "mc_fritas_media", "name": "McFritas média", "default_portion_g": 110, "kcal_per_100g": 307, "protein_per_100g": 3.5, "carbs_per_100g": 41, "fat_per_100g": 15, "active": True},
+    {"food_key": "quarterao", "name": "Quarterão com queijo", "default_portion_g": 200, "kcal_per_100g": 254, "protein_per_100g": 15, "carbs_per_100g": 21, "fat_per_100g": 13, "active": True},
+    {"food_key": "mc_nuggets_6", "name": "McNuggets 6 un", "default_portion_g": 100, "kcal_per_100g": 261, "protein_per_100g": 15, "carbs_per_100g": 15, "fat_per_100g": 15, "active": True},
+    {"food_key": "sorvete_pote", "name": "Sorvete de pote", "default_portion_g": 100, "kcal_per_100g": 207, "protein_per_100g": 3.5, "carbs_per_100g": 24, "fat_per_100g": 11, "active": True},
+    {"food_key": "chocolate_ao_leite", "name": "Chocolate ao leite", "default_portion_g": 25, "kcal_per_100g": 535, "protein_per_100g": 7.2, "carbs_per_100g": 59, "fat_per_100g": 30, "active": True},
+    {"food_key": "bolo_chocolate", "name": "Bolo de chocolate", "default_portion_g": 80, "kcal_per_100g": 371, "protein_per_100g": 5.6, "carbs_per_100g": 52, "fat_per_100g": 16, "active": True},
+    {"food_key": "salgado_padaria", "name": "Salgado de padaria", "default_portion_g": 120, "kcal_per_100g": 320, "protein_per_100g": 9, "carbs_per_100g": 28, "fat_per_100g": 18, "active": True},
+    {"food_key": "pao_de_queijo", "name": "Pão de queijo", "default_portion_g": 50, "kcal_per_100g": 330, "protein_per_100g": 6, "carbs_per_100g": 34, "fat_per_100g": 18, "active": True},
+    {"food_key": "feijao_tropeiro", "name": "Feijão tropeiro", "default_portion_g": 120, "kcal_per_100g": 230, "protein_per_100g": 8, "carbs_per_100g": 22, "fat_per_100g": 12, "active": True},
+    {"food_key": "churrasco_selfservice", "name": "Churrasco self-service", "default_portion_g": 200, "kcal_per_100g": 250, "protein_per_100g": 20, "carbs_per_100g": 8, "fat_per_100g": 15, "active": True},
+    {"food_key": "yakisoba", "name": "Yakisoba", "default_portion_g": 250, "kcal_per_100g": 140, "protein_per_100g": 7, "carbs_per_100g": 18, "fat_per_100g": 4, "active": True},
+    {"food_key": "temaki_salmao", "name": "Temaki de salmão", "default_portion_g": 160, "kcal_per_100g": 190, "protein_per_100g": 10, "carbs_per_100g": 21, "fat_per_100g": 6, "active": True},
+    {"food_key": "sushi_12", "name": "Combinado sushi 12 peças", "default_portion_g": 240, "kcal_per_100g": 145, "protein_per_100g": 8, "carbs_per_100g": 21, "fat_per_100g": 3, "active": True},
+    {"food_key": "cerveja_garrafa", "name": "Cerveja garrafa 600 ml", "default_portion_g": 600, "kcal_per_100g": 43, "protein_per_100g": 0.5, "carbs_per_100g": 3.5, "fat_per_100g": 0, "active": True},
+    {"food_key": "caipirinha", "name": "Caipirinha", "default_portion_g": 250, "kcal_per_100g": 90, "protein_per_100g": 0, "carbs_per_100g": 12, "fat_per_100g": 0, "active": True},
+    {"food_key": "gin_tonica", "name": "Gin tônica", "default_portion_g": 250, "kcal_per_100g": 65, "protein_per_100g": 0, "carbs_per_100g": 7, "fat_per_100g": 0, "active": True},
+    {"food_key": "whisky_dose", "name": "Whisky dose", "default_portion_g": 50, "kcal_per_100g": 220, "protein_per_100g": 0, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
+    {"food_key": "vodka_mixer_zero", "name": "Vodka + mixer zero", "default_portion_g": 200, "kcal_per_100g": 60, "protein_per_100g": 0, "carbs_per_100g": 0.2, "fat_per_100g": 0, "active": True},
+]
+
+
+def merge_food_libraries(remote_foods, local_foods):
+    merged = {f['food_key']: f for f in local_foods}
+    for f in remote_foods:
+        merged[f['food_key']] = f
+    return sorted(merged.values(), key=lambda f: f['name'].lower())
+
+
 def get_goals():
     rows = q("goals", active=True)
-    return {r["metric"]: r for r in rows}
+    merged = {k: dict(v) for k, v in DEFAULT_GOALS.items()}
+    for r in rows:
+        merged[r["metric"]] = r
+    return merged
 
 
 def get_weight_history(days=30, end_date=None):
@@ -276,8 +372,12 @@ def get_meals(dt):
 
 
 def get_foods():
-    res = db.table("food_library").select("*").eq("active", True).order("name").execute()
-    return res.data or []
+    try:
+        res = db.table("food_library").select("*").eq("active", True).order("name").execute()
+        remote = res.data or []
+    except Exception:
+        remote = []
+    return merge_food_libraries(remote, LOCAL_FOOD_LIBRARY)
 
 
 def get_sleep(dt):
@@ -293,6 +393,16 @@ def get_workout(dt):
 def save_workout(dt, payload):
     data = {"date": dt, **payload}
     return safe_execute(lambda: db.table("workout_logs").upsert(data, on_conflict="date").execute())
+
+
+def get_hydration(dt):
+    rows = q("hydration_daily", date=dt)
+    return rows[0] if rows else {}
+
+
+def save_hydration(dt, water_ml):
+    data = {"date": dt, "water_ml": water_ml}
+    return safe_execute(lambda: db.table("hydration_daily").upsert(data, on_conflict="date").execute())
 
 
 def meal_totals(meals):
@@ -338,45 +448,47 @@ MEAL_CONFIG = {
     "cafe": {
         "label": "☕ Café da manhã",
         "foods": [
-            "ovo_cozido", "whey_dose", "suco_verde", "leite_desnatado", "pao_integral",
-            "banana", "aveia", "iogurte_grego", "cafe_puro", "queijo_branco"
+            "ovo_cozido", "ovo_mexido", "whey_dose", "suco_verde", "leite_desnatado", "pao_integral",
+            "banana", "maca", "aveia", "iogurte_grego", "cafe_puro", "queijo_branco", "tapioca", "granola", "pao_de_queijo", "suco_laranja", "agua", "coca_zero_lata"
         ],
     },
     "almoco": {
         "label": "🍚 Almoço",
         "foods": [
-            "arroz_branco", "feijao_cozido", "arroz_feijao", "frango_grelhado", "patinho_moido",
-            "carne_magra", "lombo_suino", "batata_cozida", "mandioca_cozida", "lentilha",
+            "arroz_branco", "feijao_cozido", "arroz_feijao", "frango_grelhado", "frango_desfiado", "patinho_moido",
+            "carne_magra", "lombo_suino", "batata_cozida", "batata_doce", "mandioca_cozida", "lentilha",
             "alface", "rucula", "tomate", "cenoura_crua", "beterraba", "chuchu", "vagem",
-            "couve_cozida", "azeite", "agua", "refri_zero"
+            "couve_cozida", "azeite", "farofa", "feijao_tropeiro", "churrasco_selfservice", "yakisoba",
+            "agua", "refri_zero", "coca_zero_lata", "refrigerante_normal_lata"
         ],
     },
     "lanche": {
         "label": "🥪 Lanche / pré-treino",
         "foods": [
-            "pao_integral", "whey_dose", "iogurte_grego", "banana", "queijo_branco",
-            "castanhas", "cafe_puro", "leite_desnatado", "requeijao_light", "aveia", "agua", "refri_zero"
+            "pao_integral", "whey_dose", "iogurte_grego", "banana", "maca", "queijo_branco",
+            "castanhas", "cafe_puro", "leite_desnatado", "requeijao_light", "aveia", "pao_de_queijo", "salgado_padaria", "pasta_amendoim", "agua", "refri_zero", "coca_zero_lata"
         ],
     },
     "jantar": {
         "label": "🍽️ Jantar",
         "foods": [
-            "macarrao_cozido", "arroz_branco", "frango_grelhado", "patinho_moido", "carne_magra",
-            "hamburguer_caseiro", "mussarela", "pao_integral", "sopa_lentilha", "caldo_abobora",
-            "alface", "rucula", "tomate", "cenoura_crua", "couve_cozida", "agua", "refri_zero"
+            "macarrao_cozido", "miojo_preparado", "arroz_branco", "frango_grelhado", "patinho_moido", "carne_magra",
+            "hamburguer_caseiro", "hamburguer_artesanal", "big_mac", "quarterao", "mc_nuggets_6", "mc_fritas_media",
+            "mussarela", "pao_integral", "sopa_lentilha", "caldo_abobora", "pizza_mucarela_fatia", "pizza_calabresa_fatia",
+            "alface", "rucula", "tomate", "cenoura_crua", "couve_cozida", "agua", "refri_zero", "coca_zero_lata", "refrigerante_normal_lata"
         ],
     },
     "ceia": {
         "label": "🌙 Ceia",
         "foods": [
-            "iogurte_grego", "whey_dose", "queijo_branco", "banana", "leite_desnatado", "castanhas", "agua"
+            "iogurte_grego", "whey_dose", "queijo_branco", "banana", "leite_desnatado", "castanhas", "chocolate_ao_leite", "sorvete_pote", "bolo_chocolate", "agua"
         ],
     },
     "bebida": {
         "label": "🥤 Bebidas fora da refeição",
         "foods": [
-            "agua", "cafe_puro", "refri_zero", "cerveja_lata", "cerveja_long", "cerveja_600",
-            "vinho_taca", "destilado_dose", "chopp", "xeque_mate_lata", "aperol_spritz"
+            "agua", "cafe_puro", "refri_zero", "coca_zero_lata", "refrigerante_normal_lata", "suco_laranja", "cerveja_lata", "cerveja_long", "cerveja_600", "cerveja_garrafa",
+            "vinho_taca", "destilado_dose", "whisky_dose", "caipirinha", "gin_tonica", "vodka_mixer_zero", "chopp", "xeque_mate_lata", "aperol_spritz"
         ],
     },
 }
@@ -436,9 +548,79 @@ def compute_sleep_hours(bed_t, wake_t):
     return round((wake_dt - bed_dt).total_seconds() / 3600, 2)
 
 
+
+
+def slugify_text(text):
+    text = (text or "").strip().lower()
+    chars = []
+    for ch in text:
+        if ch.isalnum():
+            chars.append(ch)
+        elif ch in " -_/|":
+            chars.append("_")
+    slug = "".join(chars)
+    while "__" in slug:
+        slug = slug.replace("__", "_")
+    return slug.strip("_")[:40] or "item_customizado"
+
+
+def estimate_custom_food(description, grams_ml=100):
+    if ai is None:
+        return {"error": "A chave da OpenAI não está configurada."}
+    prompt = f"""Estime macros e calorias de forma plausível para o alimento descrito abaixo, considerando a porção informada. Responda apenas em JSON válido com as chaves: name, kcal, protein_g, carbs_g, fat_g, portion_g, rationale.
+
+Alimento: {description}
+Porção: {grams_ml} g ou ml
+
+Use estimativa prática de app nutricional, sem discurso.
+"""
+    try:
+        response = ai.responses.create(
+            model=MODEL,
+            input=[
+                {"role": "system", "content": "Você estima calorias e macros de alimentos para um diário alimentar. Responda só JSON."},
+                {"role": "user", "content": prompt},
+            ],
+            max_output_tokens=220,
+        )
+        raw = getattr(response, "output_text", "") or ""
+    except Exception:
+        try:
+            response = ai.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": "Você estima calorias e macros de alimentos para um diário alimentar. Responda só JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                max_completion_tokens=220,
+            )
+            raw = response.choices[0].message.content or ""
+        except Exception as e:
+            return {"error": f"Erro ao estimar item: {e}"}
+    try:
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        payload = json.loads(raw[start:end])
+        return payload
+    except Exception:
+        return {"error": f"A IA não retornou JSON utilizável. Resposta: {raw[:300]}"}
+
+
+def target_snapshot(goals):
+    return {
+        "kcal": float(goals.get("kcal_daily", {}).get("target_value", 2400)),
+        "protein": float(goals.get("protein_daily", {}).get("target_value", 190)),
+        "carb": float(goals.get("carb_daily", {}).get("target_value", 190)),
+        "fat": float(goals.get("fat_daily", {}).get("target_value", 70)),
+        "water_ml": float(goals.get("water_daily_ml", {}).get("target_value", 4000)),
+        "weight_goal": float(goals.get("weight", {}).get("target_value", 99.9)),
+        "weight_long": float(goals.get("weight_long_term", {}).get("target_value", 90)),
+    }
+
+
 def food_status_class(kcal, prot, goals):
-    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2067))
-    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 180))
+    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2400))
+    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 190))
     if kcal <= 0:
         return None, None
     if kcal <= kcal_goal * 1.08 and prot >= protein_goal * 0.9:
@@ -458,11 +640,11 @@ def overall_status(dt_iso, goals):
     t = meal_totals(meals)
     score = 0
     if t["kcal"] > 0:
-        if t["kcal"] <= float(goals.get("kcal_daily", {}).get("target_value", 2067)) * 1.1:
+        if t["kcal"] <= float(goals.get("kcal_daily", {}).get("target_value", 2400)) * 1.1:
             score += 35
         else:
             score += 18
-        if t["prot"] >= float(goals.get("protein_daily", {}).get("target_value", 180)) * 0.85:
+        if t["prot"] >= float(goals.get("protein_daily", {}).get("target_value", 190)) * 0.85:
             score += 25
         else:
             score += 10
@@ -486,6 +668,10 @@ def period_summary(days):
     meals = db.table("meals").select("date,meal_type,kcal,protein_g,carbs_g,fat_g,food_key").gte("date", start).lte("date", end_s).execute().data or []
     sleep_rows = db.table("sleep_cpap").select("date,total_hours,energy_score,ahi").gte("date", start).lte("date", end_s).execute().data or []
     checks = db.table("checklist_daily").select("date,item_key,done").gte("date", start).lte("date", end_s).execute().data or []
+    try:
+        hydration_rows = db.table("hydration_daily").select("date,water_ml").gte("date", start).lte("date", end_s).execute().data or []
+    except Exception:
+        hydration_rows = []
     weights = get_weight_history(days, end_date=end_d)
 
     try:
@@ -529,6 +715,8 @@ def period_summary(days):
     avg_sleep = mean([float(r.get("total_hours") or 0) for r in sleep_rows if r.get("total_hours")]) if sleep_rows else 0
     avg_energy = mean([int(r.get("energy_score") or 0) for r in sleep_rows if r.get("energy_score") is not None]) if sleep_rows else 0
     avg_ahi = mean([float(r.get("ahi") or 0) for r in sleep_rows if r.get("ahi") is not None]) if sleep_rows else 0
+    avg_water_ml = mean([float(r.get("water_ml") or 0) for r in hydration_rows if r.get("water_ml") is not None]) if hydration_rows else 0
+    water_days = len([r for r in hydration_rows if r.get("water_ml")])
     filled_days = sum(1 for d in active_days if (by_day.get(d, {}).get("meals", 0) >= 3 or sleep_map.get(d) or routine_counts.get(d)))
 
     adherence_values = []
@@ -556,6 +744,8 @@ def period_summary(days):
         "avg_sleep": avg_sleep,
         "avg_energy": avg_energy,
         "avg_ahi": avg_ahi,
+        "avg_water_ml": avg_water_ml,
+        "water_days": water_days,
         "treino_days": len(treino_days),
         "treino_ratio": treino_ratio,
         "filled_days": filled_days,
@@ -585,14 +775,16 @@ def render_period_summary_card(summary):
 
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown(f"**Resumo dos últimos {summary['days']} dias**")
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.metric("kcal média", f"{summary['avg_kcal']:.0f}")
     c2.metric("prot média", f"{summary['avg_prot']:.0f}g")
     c3.metric("sono médio", f"{summary['avg_sleep']:.1f}h")
-    c4, c5, c6 = st.columns(3)
-    c4.metric("treino", f"{summary['treino_days']} dias")
-    c5.metric("rotina", f"{summary['avg_routine_adherence']:.0f}%")
-    c6.metric("energia", f"{summary['avg_energy']:.1f}/10")
+    c4.metric("água média", f"{summary['avg_water_ml']/1000:.1f}L")
+    c5, c6, c7, c8 = st.columns(4)
+    c5.metric("treino", f"{summary['treino_days']} dias")
+    c6.metric("rotina", f"{summary['avg_routine_adherence']:.0f}%")
+    c7.metric("energia", f"{summary['avg_energy']:.1f}/10")
+    c8.metric("água", f"{summary['water_days']}/{summary['days']}")
 
     if delta is not None:
         st.caption(f"Peso no período: {summary['first_weight']:.1f} → {summary['last_weight']:.1f} kg ({delta:+.1f} kg)")
@@ -602,14 +794,17 @@ def render_period_summary_card(summary):
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=None):
+def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=None, hydration=None):
     t = meal_totals(meals)
-    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2067))
-    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 180))
+    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2400))
+    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 190))
     routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
     done = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
     total = len(routine_items)
     workout = workout or {}
+    hydration = hydration or {}
+    water_goal = float(goals.get("water_daily_ml", {}).get("target_value", 4000))
+    water_ml = float(hydration.get("water_ml") or 0)
     trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
 
     positives = []
@@ -660,6 +855,15 @@ def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=Non
     else:
         add_attention("O sono da noite anterior ainda não foi registrado.", priority=8)
         add_action("Preencha o sono antes de fechar a leitura do dia.", priority=8)
+
+    if water_ml >= water_goal * 0.85:
+        positives.append("A água do dia está numa faixa boa para sustentar aderência, treino e sensação de controle.")
+    elif water_ml > 0:
+        add_attention("A água do dia ficou abaixo da meta. Isso pesa em saciedade, energia e disciplina do processo.", priority=7)
+        add_action("Suba água de forma simples: feche o dia com mais 500 ml e abra amanhã já com uma garrafa definida.", priority=7)
+    else:
+        add_attention("A água do dia ainda não foi registrada. Sem isso, a leitura do seu padrão fica pela metade.", priority=6)
+        add_action("Registre a água total do dia ou pelo menos um valor honesto de partida.", priority=6)
 
     if trained:
         workout_type = workout.get("workout_type")
@@ -762,6 +966,79 @@ def macro_pills(kcal, prot, carb, fat):
         """,
         unsafe_allow_html=True,
     )
+
+
+
+
+def render_strategy_current(goals, current_weight=None):
+    t = target_snapshot(goals)
+    long_goal = t["weight_long"]
+    interim_goal = t["weight_goal"]
+    kcal = t["kcal"]
+    protein = t["protein"]
+    carb = t["carb"]
+    fat = t["fat"]
+    water_ml = t["water_ml"]
+
+    left = '<div class="strategy-card">'
+    left += '<div class="strategy-kicker">Estratégia atual</div>'
+    left += f'<div class="strategy-title">{STRATEGY_TEXT["title"]}</div>'
+    left += f'<div class="strategy-copy">{STRATEGY_TEXT["copy"]}</div>'
+    left += '<div class="tag-row">'
+    left += '<div class="tag">Meta 2026: sair dos 3 dígitos</div>'
+    left += '<div class="tag">Foco: preservar massa magra</div>'
+    left += '<div class="tag">Evitar perda caótica e flacidez piorada</div>'
+    left += '</div></div>'
+
+    right = '<div class="strategy-card">'
+    right += '<div class="strategy-kicker">Metas oficiais da fase</div>'
+    right += '<div class="target-grid">'
+    right += f'<div class="target-card"><div class="target-label">Calorias</div><div class="target-value">{kcal:.0f}</div><div class="target-sub">Faixa boa 2250–2500</div></div>'
+    right += f'<div class="target-card"><div class="target-label">Proteína</div><div class="target-value">{protein:.0f} g</div><div class="target-sub">Faixa boa 180–210 g</div></div>'
+    right += f'<div class="target-card"><div class="target-label">Carbo</div><div class="target-value">{carb:.0f} g</div><div class="target-sub">Faixa base 160–220 g</div></div>'
+    right += f'<div class="target-card"><div class="target-label">Gordura</div><div class="target-value">{fat:.0f} g</div><div class="target-sub">Faixa base 60–80 g</div></div>'
+    right += '</div>'
+    if current_weight is not None:
+        right += f'<div class="strategy-copy">Peso atual {current_weight:.1f} kg · Meta intermediária {interim_goal:.1f} kg · Meta longa {long_goal:.1f} kg.</div>'
+    else:
+        right += f'<div class="strategy-copy">Meta intermediária {interim_goal:.1f} kg · Meta longa {long_goal:.1f} kg.</div>'
+    right += '</div>'
+
+    st.markdown(f'<div class="strategy-grid">{left}{right}</div>', unsafe_allow_html=True)
+
+
+def render_hydration_card(dt_iso, hydration, goals):
+    water_goal = float(goals.get("water_daily_ml", {}).get("target_value", 4000))
+    current = float(hydration.get("water_ml") or 0)
+    pct = 0 if water_goal <= 0 else min(100, (current / water_goal) * 100)
+    c1, c2 = st.columns([1.2, 1])
+    with c1:
+        st.markdown('<div class="section-title">Água do dia</div>', unsafe_allow_html=True)
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown(f'**{current/1000:.1f} L** registrados · meta **{water_goal/1000:.1f} L**')
+        st.markdown(f'<div class="progress-bar"><div class="progress-fill" style="width:{pct:.1f}%"></div></div>', unsafe_allow_html=True)
+        st.caption("Água entra como meta formal porque melhora leitura do dia, treino, saciedade e consistência.")
+        st.markdown('</div>', unsafe_allow_html=True)
+    with c2:
+        wv = st.number_input("Água total do dia (ml)", 0, 10000, int(current), 250, key=f"water_{dt_iso}")
+        r1, r2 = st.columns(2)
+        if r1.button("+300 ml", key=f"w300_{dt_iso}", use_container_width=True):
+            save_hydration(dt_iso, int(current + 300))
+            st.rerun()
+        if r2.button("+500 ml", key=f"w500_{dt_iso}", use_container_width=True):
+            save_hydration(dt_iso, int(current + 500))
+            st.rerun()
+        if st.button("Salvar água", key=f"save_water_{dt_iso}", use_container_width=True):
+            ok, msg = save_hydration(dt_iso, int(wv))
+            if ok:
+                st.success("Água salva.")
+                st.rerun()
+            else:
+                st.warning("A tabela de água ainda não existe no banco. Rode o SQL abaixo no Supabase.")
+                st.code("""create table if not exists public.hydration_daily (
+  date date primary key,
+  water_ml integer
+);""")
 
 
 def render_day_summary_band(current_weight, goal_weight, meals, checklist, sleep, workout):
@@ -891,11 +1168,13 @@ def page_hoje():
     current_weight = get_weight(target)
     sleep = get_sleep(target)
     workout = get_workout(target)
+    hydration = get_hydration(target)
     checklist = get_checklist(target)
     meals = get_meals(target)
 
     st.markdown('<div class="section-title">Resumo do dia</div>', unsafe_allow_html=True)
     render_day_summary_band(current_weight, goal_weight, meals, checklist, sleep, workout)
+    render_strategy_current(goals, current_weight=current_weight)
 
     c1, c2 = st.columns([2.2, 1])
     with c1:
@@ -912,6 +1191,7 @@ def page_hoje():
 
     st.markdown('<div class="section-title">Sono da noite anterior</div>', unsafe_allow_html=True)
     page_sono_quick(target, sleep)
+    render_hydration_card(target, hydration, goals)
 
     trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
     st.markdown('<div class="section-title">Treino do dia</div>', unsafe_allow_html=True)
@@ -982,7 +1262,7 @@ def page_hoje():
         st.caption(f"Aderência da rotina: {done_count}/{len(checklist_items)} ({pct}%)")
 
     st.markdown('<div class="section-title">Leitura do dia</div>', unsafe_allow_html=True)
-    st.markdown(build_day_review(target, goals, meals, checklist, sleep, current_weight, workout=workout), unsafe_allow_html=True)
+    st.markdown(build_day_review(target, goals, meals, checklist, sleep, current_weight, workout=workout, hydration=hydration), unsafe_allow_html=True)
 
 
 # ==================================================
@@ -1061,10 +1341,11 @@ def page_sono_quick(target, data):
 def page_alimentacao():
     target = date_bar()
     st.markdown('<div class="section-title">Alimentação por refeição</div>', unsafe_allow_html=True)
+    goals = get_goals()
+    render_strategy_current(goals)
     foods = get_foods()
     food_map = {f["food_key"]: f for f in foods}
     all_meals = get_meals(target)
-    goals = get_goals()
     totals = meal_totals(all_meals)
     macro_pills(totals["kcal"], totals["prot"], totals["carb"], totals["fat"])
     klass, label = food_status_class(totals["kcal"], totals["prot"], goals)
@@ -1129,6 +1410,49 @@ def page_alimentacao():
                     ).execute()
                     st.success("Item adicionado.")
                     st.rerun()
+
+            st.markdown('<div class="food-search-box">', unsafe_allow_html=True)
+            st.markdown("**Item que não está na base**")
+            custom_desc = st.text_input("Descreva o item real que você comeu", key=f"custom_desc_{meal_key}_{target}", placeholder="Ex.: Big Mac + metade da batata / marmita de churrasco / miojo / combo do aeroporto")
+            custom_portion = st.number_input("Porção estimada (g ou ml)", 1.0, 5000.0, 150.0, 10.0, key=f"custom_portion_{meal_key}_{target}")
+            estimate_key = f"custom_estimate_{meal_key}_{target}"
+            if st.button("Estimar com IA", key=f"estimate_{meal_key}_{target}", use_container_width=True):
+                if not custom_desc.strip():
+                    st.warning("Descreva o item antes de estimar.")
+                else:
+                    with st.spinner("Estimando macros e calorias..."):
+                        st.session_state[estimate_key] = estimate_custom_food(custom_desc.strip(), custom_portion)
+                        st.rerun()
+            est = st.session_state.get(estimate_key)
+            if est:
+                if est.get("error"):
+                    st.error(est["error"])
+                else:
+                    st.markdown('<div class="custom-estimate">', unsafe_allow_html=True)
+                    st.markdown(f"**{est.get('name') or custom_desc}** · {float(est.get('portion_g') or custom_portion):.0f} g/ml")
+                    st.markdown(f"{float(est.get('kcal') or 0):.0f} kcal · P {float(est.get('protein_g') or 0):.1f} g · C {float(est.get('carbs_g') or 0):.1f} g · G {float(est.get('fat_g') or 0):.1f} g")
+                    if est.get("rationale"):
+                        st.caption(est.get("rationale"))
+                    if st.button("Salvar item customizado", key=f"save_custom_{meal_key}_{target}", use_container_width=True):
+                        custom_key = f"custom_{slugify_text(est.get('name') or custom_desc)}"
+                        db.table("meals").insert(
+                            {
+                                "date": target,
+                                "meal_type": meal_key,
+                                "food_key": custom_key,
+                                "quantity_g": float(est.get("portion_g") or custom_portion),
+                                "portions": 1,
+                                "kcal": float(est.get("kcal") or 0),
+                                "protein_g": float(est.get("protein_g") or 0),
+                                "carbs_g": float(est.get("carbs_g") or 0),
+                                "fat_g": float(est.get("fat_g") or 0),
+                            }
+                        ).execute()
+                        st.success("Item customizado salvo na refeição.")
+                        st.session_state.pop(estimate_key, None)
+                        st.rerun()
+                    st.markdown('</div>', unsafe_allow_html=True)
+            st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ==================================================
@@ -1459,6 +1783,10 @@ def build_context(days=14):
     sleep = db.table("sleep_cpap").select("date,total_hours,ahi,energy_score,tiredness_score").gte("date", start).lte("date", end_s).order("date").execute().data or []
     checks = db.table("checklist_daily").select("date,item_key,done").gte("date", start).lte("date", end_s).order("date").execute().data or []
     try:
+        hydration = db.table("hydration_daily").select("date,water_ml").gte("date", start).lte("date", end_s).order("date").execute().data or []
+    except Exception:
+        hydration = []
+    try:
         workouts = db.table("workout_logs").select("*").gte("date", start).lte("date", end_s).order("date").execute().data or []
     except Exception:
         workouts = []
@@ -1477,6 +1805,7 @@ Refeições: {json.dumps(meals, default=str)}
 Sono: {json.dumps(sleep, default=str)}
 Checklist: {json.dumps(checks, default=str)}
 Treinos detalhados: {json.dumps(workouts, default=str)}
+Água: {json.dumps(hydration, default=str)}
 Bio mais recente: {json.dumps(bio, default=str)}
 Exames mais recentes: {json.dumps(labs, default=str)}
 """
@@ -1484,7 +1813,7 @@ Exames mais recentes: {json.dumps(labs, default=str)}
 
 def page_ia():
     st.markdown('<div class="section-title">IA / perguntas</div>', unsafe_allow_html=True)
-    st.caption("Aqui a IA faz mais sentido para analisar consistência, aderência de treino, sono, alimentação e tendência do período.")
+    st.caption("Aqui a IA faz mais sentido para analisar consistência, aderência de treino, água, sono, alimentação e tendência do período com foco em perder gordura sem desmontar massa magra.")
     render_period_cards()
 
     c1, c2, c3 = st.columns(3)
@@ -1513,7 +1842,7 @@ def page_ia():
     if st.session_state.chat_history and st.session_state.chat_history[-1]["role"] == "user":
         with st.spinner("Analisando seus dados..."):
             ctx = build_context(days)
-            system = """Você é um assistente analítico de saúde pessoal. Seja direto, prático e nada coach. Foque em consistência, aderência, treino, sono, alimentação e padrões do período. Não repita exame antigo sem motivo. Não invente fatos. Estruture sempre em: leitura objetiva, consistência do período, principal gargalo, prioridade prática da próxima semana."""
+            system = """Você é um assistente analítico de saúde pessoal. Seja direto, prático e nada coach. O objetivo central do usuário é perder gordura preservando massa magra, reduzir risco de flacidez por perda mal conduzida e sair dos 3 dígitos com consistência. Foque em calorias, proteína, água, treino, sono, aderência e padrões do período. Não repita exame antigo sem motivo. Não invente fatos. Estruture em: leitura objetiva, consistência do período, principal gargalo, impacto sobre composição corporal, prioridade prática da próxima semana."""
             user = ctx + "\n\nPergunta do usuário: " + st.session_state.chat_history[-1]["content"]
             result = ask_openai(system, user, max_tokens=650)
             st.session_state.chat_history.append({"role": "assistant", "content": result})
