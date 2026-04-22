@@ -5,7 +5,6 @@ import calendar
 import json
 
 import pandas as pd
-import altair as alt
 import streamlit as st
 from openai import OpenAI
 from supabase import create_client
@@ -453,6 +452,21 @@ def get_weight(dt):
     return float(rows[0]["weight_kg"]) if rows else None
 
 
+def get_latest_weight_value(end_date=None):
+    try:
+        query = db.table("daily_weight").select("date,weight_kg")
+        if end_date is not None:
+            if isinstance(end_date, date):
+                query = query.lte("date", end_date.isoformat())
+            else:
+                query = query.lte("date", str(end_date))
+        res = query.order("date", desc=True).limit(1).execute()
+        data = res.data or []
+        return float(data[0]["weight_kg"]) if data else None
+    except Exception:
+        return None
+
+
 def save_weight(dt, kg):
     db.table("daily_weight").upsert({"date": dt, "weight_kg": kg}, on_conflict="date").execute()
 
@@ -507,6 +521,16 @@ def get_hydration(dt):
 def save_hydration(dt, water_ml):
     data = {"date": dt, "water_ml": water_ml}
     return safe_execute(lambda: db.table("hydration_daily").upsert(data, on_conflict="date").execute())
+
+
+def get_daily_closure(dt):
+    rows = q("daily_closure", date=dt)
+    return rows[0] if rows else {}
+
+
+def save_daily_closure(dt, payload):
+    data = {"date": dt, **payload}
+    return safe_execute(lambda: db.table("daily_closure").upsert(data, on_conflict="date").execute())
 
 
 def meal_totals(meals):
@@ -717,8 +741,8 @@ def target_snapshot(goals):
         "carb": float(goals.get("carb_daily", {}).get("target_value", 190)),
         "fat": float(goals.get("fat_daily", {}).get("target_value", 70)),
         "water_ml": float(goals.get("water_daily_ml", {}).get("target_value", 4000)),
-        "weight_goal": float(PROJECT_PROFILE["goal_weight_intermediate"]),
-        "weight_long": float(PROJECT_PROFILE["goal_weight_final"]),
+        "weight_goal": float(goals.get("weight", {}).get("target_value", 99.9)),
+        "weight_long": float(goals.get("weight_long_term", {}).get("target_value", 90)),
     }
 
 
@@ -896,6 +920,282 @@ def render_period_summary_card(summary):
     for line in consistency_lines:
         st.markdown(f"- {line}")
     st.markdown('</div>', unsafe_allow_html=True)
+
+
+ALCOHOL_KEYS = {
+    "cerveja_garrafa", "cerveja_lata", "cerveja_long", "cerveja_600", "chopp",
+    "vinho_taca", "destilado_dose", "whisky_dose", "caipirinha", "gin_tonica",
+    "vodka_mixer_zero", "aperol_spritz"
+}
+
+
+def get_score_band(score_total):
+    if score_total >= 85:
+        return "g", "dia forte"
+    if score_total >= 70:
+        return "b", "dia bom"
+    if score_total >= 55:
+        return "y", "dia parcial"
+    return "r", "dia fraco"
+
+
+def calculate_day_score(goals, meals, checklist, sleep, workout=None, hydration=None):
+    workout = workout or {}
+    hydration = hydration or {}
+    totals = meal_totals(meals)
+    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2400))
+    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 190))
+    water_goal = float(goals.get("water_daily_ml", {}).get("target_value", 4000))
+
+    meal_types = {m.get("meal_type") for m in meals if m.get("meal_type") and m.get("meal_type") != "bebida"}
+    alcohol_count = sum(1 for m in meals if (m.get("food_key") or "") in ALCOHOL_KEYS)
+
+    if totals["kcal"] <= 0:
+        food_kcal_score = 0
+    else:
+        kcal_ratio = totals["kcal"] / kcal_goal if kcal_goal else 0
+        if 0.85 <= kcal_ratio <= 1.10:
+            food_kcal_score = 15
+        elif 0.75 <= kcal_ratio <= 1.20:
+            food_kcal_score = 12
+        elif 0.60 <= kcal_ratio <= 1.35:
+            food_kcal_score = 8
+        else:
+            food_kcal_score = 4
+
+    structure_count = len(meal_types)
+    if structure_count >= 4:
+        food_structure_score = 10
+    elif structure_count == 3:
+        food_structure_score = 8
+    elif structure_count == 2:
+        food_structure_score = 5
+    elif structure_count == 1:
+        food_structure_score = 2
+    else:
+        food_structure_score = 0
+
+    food_context_score = 5
+    if alcohol_count >= 1:
+        food_context_score -= 2
+    if alcohol_count >= 3:
+        food_context_score -= 1
+    if totals["kcal"] > kcal_goal * 1.25:
+        food_context_score -= 2
+    food_context_score = max(0, food_context_score)
+    food_score = food_kcal_score + food_structure_score + food_context_score
+
+    protein_ratio = totals["prot"] / protein_goal if protein_goal else 0
+    if protein_ratio >= 1.0:
+        protein_score = 20
+    elif protein_ratio >= 0.9:
+        protein_score = 17
+    elif protein_ratio >= 0.8:
+        protein_score = 14
+    elif protein_ratio >= 0.7:
+        protein_score = 10
+    elif protein_ratio >= 0.6:
+        protein_score = 7
+    elif protein_ratio >= 0.4:
+        protein_score = 4
+    else:
+        protein_score = 0
+
+    trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
+    duration = int(workout.get("duration_min") or 0)
+    if not trained:
+        workout_score = 0
+    elif duration >= 45:
+        workout_score = 20
+    elif duration >= 30:
+        workout_score = 18
+    elif duration >= 20:
+        workout_score = 15
+    elif duration > 0:
+        workout_score = 12
+    else:
+        workout_score = 16
+
+    total_hours = float(sleep.get("total_hours") or 0) if sleep else 0
+    if total_hours >= 7:
+        sleep_base = 11
+    elif total_hours >= 6.5:
+        sleep_base = 10
+    elif total_hours >= 6:
+        sleep_base = 8
+    elif total_hours >= 5:
+        sleep_base = 5
+    elif total_hours > 0:
+        sleep_base = 2
+    else:
+        sleep_base = 0
+    cpap_bonus = 0
+    if sleep and sleep.get("used_cpap"):
+        cpap_hours = float(sleep.get("cpap_hours") or 0)
+        if cpap_hours >= 4:
+            cpap_bonus = 4
+        elif cpap_hours > 0:
+            cpap_bonus = 2
+    sleep_score = min(15, sleep_base + cpap_bonus)
+
+    routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
+    routine_total = len(routine_items)
+    routine_done = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
+    routine_score = round((routine_done / routine_total) * 10) if routine_total else 0
+
+    water_ml = float(hydration.get("water_ml") or 0)
+    water_ratio = water_ml / water_goal if water_goal else 0
+    if water_ratio >= 1.0:
+        water_score = 5
+    elif water_ratio >= 0.8:
+        water_score = 4
+    elif water_ratio >= 0.6:
+        water_score = 3
+    elif water_ratio >= 0.4:
+        water_score = 2
+    elif water_ratio > 0:
+        water_score = 1
+    else:
+        water_score = 0
+
+    total_score = food_score + protein_score + workout_score + sleep_score + routine_score + water_score
+    if workout_score == 0 and protein_score <= 7:
+        total_score = min(total_score, 59)
+
+    score_class, score_label = get_score_band(total_score)
+    return {
+        "food": food_score,
+        "protein": protein_score,
+        "workout": workout_score,
+        "sleep": sleep_score,
+        "routine": routine_score,
+        "water": water_score,
+        "total": int(total_score),
+        "score_class": score_class,
+        "score_label": score_label,
+        "alcohol_count": alcohol_count,
+        "kcal_total": round(totals["kcal"], 1),
+        "protein_total": round(totals["prot"], 1),
+        "carb_total": round(totals["carb"], 1),
+        "fat_total": round(totals["fat"], 1),
+        "water_ml": int(water_ml),
+        "sleep_hours": round(total_hours, 2) if total_hours else 0,
+        "trained": trained,
+        "routine_done": routine_done,
+        "routine_total": routine_total,
+    }
+
+
+def build_final_day_analysis_fallback(score_data, curve_info, meals, sleep, workout, hydration):
+    score_total = score_data["total"]
+    label = score_data["score_label"]
+    strengths = []
+    weaknesses = []
+    actions = []
+
+    if score_data["workout"] >= 18:
+        strengths.append("treino bem executado")
+    if score_data["protein"] >= 14:
+        strengths.append("proteína em nível útil para preservar massa magra")
+    if score_data["food"] >= 22:
+        strengths.append("alimentação coerente com a fase")
+    if score_data["sleep"] >= 10:
+        strengths.append("sono deu base razoável para o dia")
+
+    if score_data["protein"] <= 7:
+        weaknesses.append("proteína ficou abaixo do necessário")
+        actions.append("subir proteína com comida de verdade no almoço e no jantar")
+    if score_data["workout"] == 0:
+        weaknesses.append("dia sem treino marcado")
+        actions.append("definir já o treino de amanhã ou um mínimo viável de 20 a 30 minutos")
+    if score_data["food"] <= 15:
+        weaknesses.append("alimentação saiu da faixa útil do plano")
+        actions.append("reduzir improviso e registrar melhor as refeições")
+    if score_data["sleep"] <= 5:
+        weaknesses.append("sono insuficiente para sustentar aderência")
+        actions.append("proteger a noite de hoje e preencher sono com honestidade")
+    if score_data["water"] <= 2:
+        weaknesses.append("água baixa para o dia")
+        actions.append("fechar mais 500 ml ainda hoje e abrir amanhã já com garrafa definida")
+    if score_data["alcohol_count"] > 0:
+        weaknesses.append("álcool comeu parte da qualidade alimentar do dia")
+
+    diagnosis = f"{label.capitalize()} · {score_total}/100."
+    if curve_info.get("status") == "claramente_atrasado":
+        diagnosis += " O ritmo do peso está acima da faixa projetada."
+    elif curve_info.get("status") == "na_curva_ideal":
+        diagnosis += " O peso está na curva ideal."
+    elif curve_info.get("status") == "queda_rapida_demais":
+        diagnosis += " A queda está rápida demais para o padrão seguro."
+    elif curve_info.get("status") == "dentro_da_faixa":
+        diagnosis += " O peso segue dentro da faixa esperada."
+
+    point_strength = strengths[0] if strengths else "houve dados suficientes para fechar o dia sem operar no escuro"
+    main_weakness = weaknesses[0] if weaknesses else "nenhum ponto crítico dominou o dia"
+    next_action = actions[0] if actions else "repetir amanhã o básico com menos improviso"
+
+    return (
+        f"**Diagnóstico do dia:** {diagnosis}\n\n"
+        f"**Ponto forte:** {point_strength}.\n\n"
+        f"**Principal falha:** {main_weakness}.\n\n"
+        f"**Ação para amanhã:** {next_action}."
+    )
+
+
+def generate_final_day_analysis(dt_iso, goals, meals, checklist, sleep, weight, workout, hydration, score_data, curve_info):
+    fallback = build_final_day_analysis_fallback(score_data, curve_info, meals, sleep, workout, hydration)
+    if ai is None:
+        return fallback
+    context = {
+        "date": dt_iso,
+        "score_total": score_data["total"],
+        "food_score": score_data["food"],
+        "protein_score": score_data["protein"],
+        "workout_score": score_data["workout"],
+        "sleep_score": score_data["sleep"],
+        "routine_score": score_data["routine"],
+        "water_score": score_data["water"],
+        "kcal_total": score_data["kcal_total"],
+        "protein_total": score_data["protein_total"],
+        "carb_total": score_data["carb_total"],
+        "fat_total": score_data["fat_total"],
+        "water_ml": score_data["water_ml"],
+        "sleep_hours": score_data["sleep_hours"],
+        "trained": score_data["trained"],
+        "alcohol_count": score_data["alcohol_count"],
+        "curve_status": curve_info.get("label"),
+        "weight": weight,
+    }
+    system = "Você é um assistente analítico de saúde pessoal. Responda em português do Brasil, direto, sem coach, sem clichê e sem inventar dado. Foque em perder gordura preservando massa magra. Escreva exatamente em 4 blocos curtos com estes títulos: Diagnóstico do dia, Ponto forte, Principal falha, Ação para amanhã."
+    user = f"Dados do dia: {json.dumps(context, ensure_ascii=False)}"
+    result = ask_openai(system, user, max_tokens=220)
+    if not result or str(result).startswith("Erro ao gerar análise") or "A chave da OpenAI" in str(result):
+        return fallback
+    return result
+
+
+def render_closure_card(closure_payload):
+    score_data = closure_payload.get("score_data") or {}
+    total = int(closure_payload.get("score_total") or score_data.get("total") or 0)
+    score_class, score_label = get_score_band(total)
+    analysis_text = closure_payload.get("analysis_text") or ""
+    breakdown = [
+        ("Alimentação", score_data.get("food", 0), 30),
+        ("Proteína", score_data.get("protein", 0), 20),
+        ("Treino", score_data.get("workout", 0), 20),
+        ("Sono + CPAP", score_data.get("sleep", 0), 15),
+        ("Rotina", score_data.get("routine", 0), 10),
+        ("Água", score_data.get("water", 0), 5),
+    ]
+    st.markdown('<div class="section-title">Fechamento do dia</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="card"><div class="meal-name">Score final <span class="status {score_class}">{score_label}</span></div><div class="big" style="margin-top:10px;">{total} / 100</div><div class="muted">O score mede qualidade da execução do processo, não só o peso na balança.</div></div>', unsafe_allow_html=True)
+    cols = st.columns(2)
+    for idx, (label, value, total_axis) in enumerate(breakdown):
+        with cols[idx % 2]:
+            st.markdown(f'<div class="meal-card"><div class="meal-name">{label}</div><div class="meal-detail">{value} / {total_axis}</div></div>', unsafe_allow_html=True)
+    if analysis_text:
+        safe_text = analysis_text.replace("\n", "<br>")
+        st.markdown(f'<div class="analysis-box"><div class="t">Análise final do dia</div><div style="font-size:14px;line-height:1.7">{safe_text}</div></div>', unsafe_allow_html=True)
 
 
 def build_day_review(dt_iso, goals, meals, checklist, sleep, weight, workout=None, hydration=None):
@@ -1263,98 +1563,65 @@ def render_graph(end_date, goal_weight):
     df = pd.DataFrame({
         "date": pd.date_range(start=project_start, end=end_date, freq="D")
     })
+
     df["curva_min"] = df["date"].apply(
         lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_min"])
     )
     df["curva_ideal"] = df["date"].apply(
         lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_ideal"])
     )
-    df["curva_max"] = df["date"].apply(
+    df["curva_max_segura"] = df["date"].apply(
         lambda d: get_projected_weight(d.date(), PROJECT_PROFILE["expected_loss_per_week_max_safe"])
     )
+
+    df["meta_intermediaria"] = float(goal_weight)
+    df["meta_final"] = PROJECT_PROFILE["goal_weight_final"]
+    df["peso_inicial_ref"] = PROJECT_PROFILE["start_weight"]
 
     if hist:
         hist_df = pd.DataFrame(hist)
         hist_df["date"] = pd.to_datetime(hist_df["date"])
         hist_df["weight_kg"] = hist_df["weight_kg"].astype(float)
         hist_df = hist_df.groupby("date", as_index=False)["weight_kg"].last()
-        df = df.merge(hist_df.rename(columns={"weight_kg": "peso_real"}), on="date", how="left")
+        df = df.merge(
+            hist_df.rename(columns={"weight_kg": "peso_real"}),
+            on="date",
+            how="left",
+        )
     else:
         df["peso_real"] = float("nan")
 
-    monthly_targets = pd.DataFrame(get_monthly_target_rows(end_date))
-    if not monthly_targets.empty:
-        monthly_targets["date"] = pd.to_datetime(monthly_targets["date"])
-
-    y_min = min(float(df["curva_max"].min()), float(df["curva_min"].min()), float(PROJECT_PROFILE["goal_weight_final"])) - 3
-    y_max = max(float(df["curva_min"].max()), float(PROJECT_PROFILE["start_weight"])) + 3
-
-    base = alt.Chart(df).encode(
-        x=alt.X("date:T", title="Data"),
-        y=alt.Y(
-            "value:Q",
-            title="Peso (kg)",
-            scale=alt.Scale(domain=[y_min, y_max])
-        )
+    st.line_chart(
+        df.set_index("date")[
+            [
+                "peso_real",
+                "curva_ideal",
+                "curva_min",
+                "curva_max_segura",
+                "meta_intermediaria",
+                "meta_final",
+                "peso_inicial_ref",
+            ]
+        ],
+        height=280,
+        use_container_width=True,
     )
 
-    band = alt.Chart(df).mark_area(opacity=0.18).encode(
-        x=alt.X("date:T", title="Data"),
-        y=alt.Y("curva_min:Q", title="Peso (kg)", scale=alt.Scale(domain=[y_min, y_max])),
-        y2="curva_max:Q"
-    )
-
-    ideal_line = alt.Chart(df).mark_line(strokeWidth=3).encode(
-        x="date:T",
-        y=alt.Y("curva_ideal:Q", scale=alt.Scale(domain=[y_min, y_max])),
-        tooltip=[alt.Tooltip("date:T", title="Data"), alt.Tooltip("curva_ideal:Q", title="Curva ideal", format=".1f")]
-    )
-
-    real_line = alt.Chart(df.dropna(subset=["peso_real"]))        .mark_line(point=True, strokeWidth=3)        .encode(
-            x="date:T",
-            y=alt.Y("peso_real:Q", scale=alt.Scale(domain=[y_min, y_max])),
-            tooltip=[alt.Tooltip("date:T", title="Data"), alt.Tooltip("peso_real:Q", title="Peso real", format=".1f")]
-        )
-
-    chart = (band + ideal_line + real_line).properties(height=300)
-
-    if not monthly_targets.empty:
-        monthly_points = alt.Chart(monthly_targets).mark_circle(size=80, opacity=0.9).encode(
-            x="date:T",
-            y=alt.Y("target_weight:Q", scale=alt.Scale(domain=[y_min, y_max])),
-            tooltip=[alt.Tooltip("month_label:N", title="Mês"), alt.Tooltip("target_weight:Q", title="Meta ideal", format=".1f")]
-        )
-        monthly_labels = alt.Chart(monthly_targets).mark_text(dy=-10, fontSize=11).encode(
-            x="date:T",
-            y=alt.Y("target_weight:Q", scale=alt.Scale(domain=[y_min, y_max])),
-            text=alt.Text("target_weight:Q", format=".1f")
-        )
-        chart = chart + monthly_points + monthly_labels
-
-    st.altair_chart(chart.interactive(), use_container_width=True)
-
-    current_real = df["peso_real"].dropna()
-    if not current_real.empty:
-        last_real = float(current_real.iloc[-1])
-        curve_info = get_weight_curve_status(last_real, end_date)
+    if hist:
+        last_real = float(df["peso_real"].dropna().iloc[-1])
         st.caption(
             f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · "
-            f"peso atual {last_real:.1f} kg · "
-            f"curva ideal hoje {curve_info['projected_ideal']:.1f} kg · "
-            f"status: {curve_info['label']}."
+            f"meta intermediária {float(goal_weight):.1f} kg · "
+            f"meta final {PROJECT_PROFILE['goal_weight_final']:.1f} kg · "
+            f"último peso real {last_real:.1f} kg."
         )
     else:
         st.caption(
             f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · "
-            f"sem linha real suficiente ainda. Registre o peso para comparar com a curva esperada."
+            f"meta intermediária {float(goal_weight):.1f} kg · "
+            f"meta final {PROJECT_PROFILE['goal_weight_final']:.1f} kg. "
+            f"A linha real aparece conforme você for registrando o peso."
         )
-
-    if not monthly_targets.empty:
-        cols = st.columns(min(4, len(monthly_targets)))
-        for i, (_, row) in enumerate(monthly_targets.tail(4).iterrows()):
-            with cols[i % len(cols)]:
-                st.metric(row["month_label"], f"{row['target_weight']:.1f} kg")
-
 
 
 # ==================================================
@@ -1364,7 +1631,7 @@ def page_hoje():
     target = date_bar()
     target_date = st.session_state.sel_date
     goals = get_goals()
-    goal_weight = float(PROJECT_PROFILE["goal_weight_intermediate"])
+    goal_weight = float(goals.get("weight", {}).get("target_value", 90))
     current_weight = get_weight(target)
     curve_info = get_weight_curve_status(current_weight, target_date)
     sleep = get_sleep(target)
@@ -1707,7 +1974,7 @@ def page_sono_inner(target):
 def page_peso_inner(target):
     st.markdown('<div class="section-title">Peso e medidas</div>', unsafe_allow_html=True)
     goals = get_goals()
-    goal_weight = float(PROJECT_PROFILE["goal_weight_intermediate"])
+    goal_weight = float(goals.get("weight", {}).get("target_value", 90))
     period = st.selectbox("Período do gráfico", ["30 dias", "60 dias", "90 dias", "Tudo"], key="weight_period")
     days_map = {"30 dias": 30, "60 dias": 60, "90 dias": 90, "Tudo": 3650}
     hist = get_weight_history(days_map[period], end_date=st.session_state.sel_date)
