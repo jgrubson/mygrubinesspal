@@ -5,6 +5,7 @@ import calendar
 import json
 
 import pandas as pd
+import altair as alt
 import streamlit as st
 from openai import OpenAI
 from supabase import create_client
@@ -213,6 +214,73 @@ st.markdown(
     .soft-note {font-size: 12px; color: var(--muted); line-height: 1.55;}
     .custom-estimate {background: rgba(13,42,38,0.85); border:1px solid #2f6f5d; border-radius: 14px; padding: 12px; margin-top: 10px;}
 
+
+    .app-shell {max-width: 860px; margin: 0 auto;}
+    .v3-topbar {
+        position: sticky; top: 0; z-index: 20;
+        background: rgba(11,16,32,0.88);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(38,49,75,0.8);
+        border-radius: 20px;
+        padding: 10px 12px;
+        margin-bottom: 14px;
+        box-shadow: 0 18px 38px rgba(0,0,0,0.24);
+    }
+    .v3-hero {
+        background: linear-gradient(160deg, rgba(18,25,43,0.96), rgba(12,18,31,0.96));
+        border: 1px solid rgba(38,49,75,0.9);
+        border-radius: 28px;
+        padding: 18px;
+        box-shadow: 0 18px 42px rgba(0,0,0,0.26);
+        margin-bottom: 14px;
+    }
+    .v3-kicker {font-size: 11px; text-transform: uppercase; letter-spacing: 0.16em; color: var(--green); font-weight: 800;}
+    .v3-weight {font-size: 42px; line-height: 1; font-weight: 900; color: var(--text); margin-top: 10px;}
+    .v3-sub {font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.5;}
+    .v3-badge-row {display:flex; flex-wrap:wrap; gap:8px; margin-top: 12px;}
+    .v3-badge {display:inline-flex; align-items:center; border-radius:999px; border:1px solid rgba(38,49,75,0.92); background: rgba(24,34,56,0.94); padding: 7px 10px; font-size: 12px; color: var(--text);}
+    .v3-grid-2 {display:grid; grid-template-columns: 1.15fr 1fr; gap: 12px;}
+    @media (max-width: 820px) {.v3-grid-2 {grid-template-columns: 1fr;}}
+    .v3-card {
+        background: rgba(18,25,43,0.96);
+        border: 1px solid rgba(38,49,75,0.9);
+        border-radius: 24px;
+        padding: 16px;
+        box-shadow: 0 14px 32px rgba(0,0,0,0.18);
+        margin-bottom: 12px;
+    }
+    .v3-card h4 {font-size: 15px; font-weight: 800; margin: 0; color: var(--text);}
+    .v3-caption {font-size: 12px; color: var(--muted); margin-top: 4px;}
+    .v3-mini-grid {display:grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 12px;}
+    .v3-mini {
+        background: rgba(11,16,32,0.7);
+        border: 1px solid rgba(38,49,75,0.86);
+        border-radius: 18px;
+        padding: 12px;
+    }
+    .v3-mini .l {font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em;}
+    .v3-mini .v {font-size: 22px; font-weight: 900; margin-top: 5px;}
+    .v3-stats {display:grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px;}
+    @media (max-width: 700px) {.v3-stats {grid-template-columns: repeat(2, 1fr);}}
+    .v3-stat {background: rgba(11,16,32,0.72); border: 1px solid rgba(38,49,75,0.86); border-radius: 18px; padding: 10px 8px; text-align:center;}
+    .v3-stat .l {font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em;}
+    .v3-stat .v {font-size: 19px; font-weight: 900; margin-top: 4px;}
+    .v3-list {display:flex; flex-direction:column; gap:8px; margin-top: 10px;}
+    .v3-list-item {display:flex; justify-content:space-between; align-items:center; padding:10px 12px; border-radius:16px; background: rgba(11,16,32,0.7); border:1px solid rgba(38,49,75,0.82); font-size:13px;}
+    .v3-score-wrap {display:grid; grid-template-columns: 1fr auto; gap: 12px; align-items:center;}
+    .v3-score-box {border-radius: 22px; border:1px solid rgba(105,211,166,0.2); background: rgba(105,211,166,0.08); padding: 14px 16px;}
+    .v3-score-label {font-size: 11px; text-transform: uppercase; letter-spacing: .12em; color: var(--green); font-weight: 800;}
+    .v3-score-value {font-size: 34px; line-height: 1; font-weight: 900; margin-top: 6px;}
+    .v3-score-sub {font-size: 13px; color: var(--muted); margin-top: 5px;}
+    .v3-break-row {margin-top: 12px;}
+    .v3-break-top {display:flex; justify-content:space-between; align-items:center; font-size: 12px; color: var(--text); margin-bottom: 6px;}
+    .v3-break-bar {height: 9px; border-radius: 999px; background: rgba(255,255,255,0.06); overflow:hidden;}
+    .v3-break-fill {height:100%; border-radius:999px; background: linear-gradient(90deg, #84b6ff, #69d3a6);}
+    .v3-analysis {border-radius: 22px; border:1px solid rgba(38,49,75,0.92); background: linear-gradient(160deg, rgba(11,16,32,0.92), rgba(18,25,43,0.92)); padding: 16px; margin-top: 12px;}
+    .v3-analysis p {margin: 0 0 10px; font-size: 14px; line-height: 1.6; color: var(--text);}
+    .v3-analysis p:last-child {margin-bottom: 0;}
+    .v3-target-chip {display:flex; justify-content:space-between; align-items:center; border-radius:16px; border:1px solid rgba(38,49,75,0.85); background: rgba(11,16,32,0.7); padding:10px 12px; font-size:13px;}
+
 </style>
 """,
     unsafe_allow_html=True,
@@ -264,6 +332,23 @@ DEFAULT_GOALS = {
     "fat_daily": {"metric": "fat_daily", "target_value": 70, "label": "gorduras"},
     "water_daily_ml": {"metric": "water_daily_ml", "target_value": 4000, "label": "água"},
 }
+
+FALLBACK_CHECKLIST_ITEMS = [
+    {"item_key": "euthyrox", "name": "Euthyrox", "time_slot": "jejum", "instruction": "Tomar sozinho, em jejum, com água.", "sort_order": 1, "active": True},
+    {"item_key": "sertralina", "name": "Sertralina", "time_slot": "manha", "instruction": "Dose da manhã.", "sort_order": 2, "active": True},
+    {"item_key": "b12", "name": "B12", "time_slot": "manha", "instruction": "Tomar no café da manhã.", "sort_order": 3, "active": True},
+    {"item_key": "creatina", "name": "Creatina", "time_slot": "variavel", "instruction": "Dose diária, mesmo sem treino.", "sort_order": 4, "active": True},
+    {"item_key": "omega3_almoco", "name": "Ômega 3", "time_slot": "almoco", "instruction": "1 cápsula no almoço.", "sort_order": 5, "active": True},
+    {"item_key": "pantoprazol", "name": "Pantoprazol", "time_slot": "almoco", "instruction": "Tomar no meio do dia.", "sort_order": 6, "active": True},
+    {"item_key": "omega3_jantar", "name": "Ômega 3", "time_slot": "jantar", "instruction": "2 cápsulas no jantar.", "sort_order": 7, "active": True},
+    {"item_key": "vitamina_d", "name": "Vitamina D", "time_slot": "jantar", "instruction": "Tomar no jantar.", "sort_order": 8, "active": True},
+    {"item_key": "lipidil", "name": "Lipidil", "time_slot": "jantar", "instruction": "Tomar no jantar.", "sort_order": 9, "active": True},
+    {"item_key": "rosucor_eze", "name": "Rosucor / Plenance EZE", "time_slot": "jantar", "instruction": "Tomar no jantar.", "sort_order": 10, "active": True},
+    {"item_key": "magnesio", "name": "Magnésio", "time_slot": "noite", "instruction": "Tomar à noite, longe do Euthyrox.", "sort_order": 11, "active": True},
+    {"item_key": "trazodona", "name": "Trazodona", "time_slot": "noite", "instruction": "Tomar após lanche leve.", "sort_order": 12, "active": True},
+    {"item_key": "treino", "name": "Treino", "time_slot": "variavel", "instruction": "Marque quando houver treino de verdade.", "sort_order": 13, "active": True},
+    {"item_key": "cpap", "name": "CPAP", "time_slot": "noite", "instruction": "Usar à noite e registrar o sono.", "sort_order": 14, "active": True},
+]
 
 STRATEGY_TEXT = {
     "title": "Perder gordura sem desmontar sua estrutura.",
@@ -374,29 +459,6 @@ def get_monthly_target_rows(end_date):
 
     return rows
     
-
-DEFAULT_CHECKLIST_ITEMS = [
-    {"item_key": "euthyrox", "name": "Euthyrox", "time_slot": "jejum", "dosage": "25 mcg", "instruction": "Tomar sozinho, com água, em jejum.", "sort_order": 1, "active": True},
-    {"item_key": "sertralina", "name": "Sertralina", "time_slot": "manha", "dosage": "200 mg", "instruction": "Pela manhã.", "sort_order": 2, "active": True},
-    {"item_key": "b12", "name": "B12", "time_slot": "manha", "dosage": "1000 mcg", "instruction": "No café da manhã.", "sort_order": 3, "active": True},
-    {"item_key": "creatina", "name": "Creatina", "time_slot": "variavel", "dosage": "3–5 g", "instruction": "Uso diário.", "sort_order": 4, "active": True},
-    {"item_key": "pantoprazol", "name": "Pantoprazol", "time_slot": "almoco", "dosage": "40 mg", "instruction": "No meio do dia.", "sort_order": 5, "active": True},
-    {"item_key": "omega3_almoco", "name": "Ômega 3", "time_slot": "almoco", "dosage": "1 cápsula", "instruction": "Parte da dose do dia.", "sort_order": 6, "active": True},
-    {"item_key": "omega3_jantar", "name": "Ômega 3", "time_slot": "jantar", "dosage": "2 cápsulas", "instruction": "Completar dose do dia.", "sort_order": 7, "active": True},
-    {"item_key": "dprev", "name": "Vitamina D (DPrev)", "time_slot": "jantar", "dosage": "5000 UI", "instruction": "No jantar.", "sort_order": 8, "active": True},
-    {"item_key": "estat_eze", "name": "Rosucor/Plenance EZE", "time_slot": "jantar", "dosage": "5/10 mg", "instruction": "No jantar.", "sort_order": 9, "active": True},
-    {"item_key": "lipidil", "name": "Lipidil", "time_slot": "jantar", "dosage": "160 mg", "instruction": "No jantar.", "sort_order": 10, "active": True},
-    {"item_key": "magnesio", "name": "Magnésio", "time_slot": "noite", "dosage": "2 cápsulas", "instruction": "À noite, longe do Euthyrox.", "sort_order": 11, "active": True},
-    {"item_key": "trazodona", "name": "Trazodona", "time_slot": "noite", "dosage": "50 mg", "instruction": "Após lanche leve.", "sort_order": 12, "active": True},
-    {"item_key": "cpap", "name": "CPAP", "time_slot": "noite", "dosage": "usar", "instruction": "Marcar se usou na noite.", "sort_order": 13, "active": True},
-    {"item_key": "treino", "name": "Treino", "time_slot": "variavel", "dosage": "feito", "instruction": "Marcar quando o treino realmente aconteceu.", "sort_order": 14, "active": True},
-]
-
-ALCOHOL_KEYS = {
-    "cerveja_garrafa", "caipirinha", "gin_tonica", "whisky_dose", "vodka_mixer_zero",
-    "vinho_taca", "destilado_dose", "chopp", "aperol_spritz", "cerveja_lata", "cerveja_long", "cerveja_600"
-}
-
 LOCAL_FOOD_LIBRARY = [
     {"food_key": "agua", "name": "Água", "default_portion_g": 300, "kcal_per_100g": 0, "protein_per_100g": 0, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
     {"food_key": "cafe_puro", "name": "Café puro", "default_portion_g": 100, "kcal_per_100g": 2, "protein_per_100g": 0.3, "carbs_per_100g": 0, "fat_per_100g": 0, "active": True},
@@ -485,7 +547,8 @@ def get_checklist_items():
         remote = res.data or []
     except Exception:
         remote = []
-    merged = {item["item_key"]: dict(item) for item in DEFAULT_CHECKLIST_ITEMS}
+
+    merged = {item["item_key"]: item for item in FALLBACK_CHECKLIST_ITEMS}
     for item in remote:
         merged[item["item_key"]] = item
     return sorted(merged.values(), key=lambda x: int(x.get("sort_order") or 999))
@@ -538,29 +601,14 @@ def save_hydration(dt, water_ml):
     return safe_execute(lambda: db.table("hydration_daily").upsert(data, on_conflict="date").execute())
 
 
-def get_last_known_weight(dt_iso):
-    try:
-        res = (
-            db.table("daily_weight")
-            .select("date,weight_kg")
-            .lte("date", dt_iso)
-            .order("date", desc=True)
-            .limit(1)
-            .execute()
-        )
-        rows = res.data or []
-        return float(rows[0]["weight_kg"]) if rows else None
-    except Exception:
-        return None
-
-
-def get_daily_closure(dt_iso):
-    rows = q("daily_closure", date=dt_iso)
+def get_daily_closure(dt):
+    rows = q("daily_closure", date=dt)
     return rows[0] if rows else {}
 
 
-def save_daily_closure(payload):
-    return safe_execute(lambda: db.table("daily_closure").upsert(payload, on_conflict="date").execute())
+def save_daily_closure(dt, payload):
+    data = {"date": dt, **payload}
+    return safe_execute(lambda: db.table("daily_closure").upsert(data, on_conflict="date").execute())
 
 
 def meal_totals(meals):
@@ -815,164 +863,6 @@ def overall_status(dt_iso, goals):
     if score >= 55:
         return "y", f"parcial · {score}/100"
     return "r", f"fraco · {score}/100"
-
-
-def compute_daily_score(goals, meals, checklist, sleep, workout=None, hydration=None):
-    workout = workout or {}
-    hydration = hydration or {}
-    totals = meal_totals(meals)
-    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2400))
-    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 190))
-    water_goal = float(goals.get("water_daily_ml", {}).get("target_value", 4000))
-
-    # Alimentação 30
-    if totals["kcal"] <= 0:
-        food_points = 0
-    else:
-        if totals["kcal"] <= kcal_goal * 1.05:
-            kcal_points = 15
-        elif totals["kcal"] <= kcal_goal * 1.15:
-            kcal_points = 12
-        elif totals["kcal"] <= kcal_goal * 1.30:
-            kcal_points = 8
-        elif totals["kcal"] <= kcal_goal * 1.45:
-            kcal_points = 4
-        else:
-            kcal_points = 0
-
-        meal_count = len(meals)
-        if meal_count >= 4:
-            structure_points = 10
-        elif meal_count == 3:
-            structure_points = 8
-        elif meal_count == 2:
-            structure_points = 4
-        else:
-            structure_points = 2
-
-        alcohol_count = sum(1 for m in meals if (m.get("food_key") or "") in ALCOHOL_KEYS)
-        if alcohol_count == 0:
-            context_points = 5
-        elif alcohol_count == 1 and totals["kcal"] <= kcal_goal * 1.15:
-            context_points = 3
-        else:
-            context_points = 1
-
-        food_points = kcal_points + structure_points + context_points
-
-    # Proteína 20
-    prot_ratio = 0 if protein_goal <= 0 else totals["prot"] / protein_goal
-    if prot_ratio >= 1.0:
-        protein_points = 20
-    elif prot_ratio >= 0.9:
-        protein_points = 17
-    elif prot_ratio >= 0.8:
-        protein_points = 13
-    elif prot_ratio >= 0.65:
-        protein_points = 8
-    elif totals["prot"] > 0:
-        protein_points = 4
-    else:
-        protein_points = 0
-
-    # Treino 20
-    trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
-    if trained and workout.get("duration_min"):
-        workout_points = 20
-    elif trained:
-        workout_points = 16
-    else:
-        workout_points = 0
-
-    # Sono + CPAP 15
-    total_hours = float((sleep or {}).get("total_hours") or 0)
-    cpap_hours = float((sleep or {}).get("cpap_hours") or 0)
-    used_cpap = bool((sleep or {}).get("used_cpap"))
-    if total_hours >= 7:
-        sleep_points = 15
-    elif total_hours >= 6:
-        sleep_points = 11
-    elif total_hours > 0:
-        sleep_points = 7
-    else:
-        sleep_points = 0
-    if used_cpap and cpap_hours and cpap_hours < 4:
-        sleep_points = max(0, sleep_points - 2)
-
-    # Rotina 10
-    routine_items = [i for i in get_checklist_items() if is_routine_item(i) and i.get("item_key") not in {"treino", "cpap"}]
-    routine_total = len(routine_items)
-    if routine_total:
-        routine_done = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
-        routine_points = round((routine_done / routine_total) * 10)
-    else:
-        routine_points = 0
-
-    # Água 5
-    water_ml = float(hydration.get("water_ml") or 0)
-    water_ratio = 0 if water_goal <= 0 else water_ml / water_goal
-    if water_ratio >= 1:
-        water_points = 5
-    elif water_ratio >= 0.8:
-        water_points = 4
-    elif water_ratio >= 0.6:
-        water_points = 3
-    elif water_ml > 0:
-        water_points = 1
-    else:
-        water_points = 0
-
-    breakdown = {
-        "alimentacao": int(food_points),
-        "proteina": int(protein_points),
-        "treino": int(workout_points),
-        "sono_cpap": int(sleep_points),
-        "rotina": int(routine_points),
-        "agua": int(water_points),
-    }
-    total = sum(breakdown.values())
-
-    # travas
-    if workout_points == 0 and protein_points <= 8:
-        total = min(total, 59)
-    if food_points == 0 and sleep_points == 0:
-        total = min(total, 39)
-
-    if total >= 85:
-        label = "dia forte"
-        klass = "g"
-    elif total >= 70:
-        label = "dia bom"
-        klass = "g"
-    elif total >= 55:
-        label = "dia parcial"
-        klass = "y"
-    else:
-        label = "dia fraco"
-        klass = "r"
-
-    return {"total": int(total), "label": label, "class": klass, "breakdown": breakdown}
-
-
-def render_score_card(score_data):
-    breakdown = score_data["breakdown"]
-    rows = [
-        ("Alimentação", breakdown["alimentacao"], 30),
-        ("Proteína", breakdown["proteina"], 20),
-        ("Treino", breakdown["treino"], 20),
-        ("Sono + CPAP", breakdown["sono_cpap"], 15),
-        ("Rotina", breakdown["rotina"], 10),
-        ("Água", breakdown["agua"], 5),
-    ]
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown(f'<div class="section-title" style="margin-top:0">Fechamento do dia</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="big">{score_data["total"]}/100</div>', unsafe_allow_html=True)
-    st.markdown(f'<span class="status {score_data["class"]}">{score_data["label"]}</span>', unsafe_allow_html=True)
-    for label, value, total in rows:
-        pct = 0 if total <= 0 else int((value / total) * 100)
-        st.markdown(f"**{label}** · {value}/{total}")
-        st.progress(pct / 100)
-    st.markdown('</div>', unsafe_allow_html=True)
 
 
 def period_summary(days):
@@ -1267,6 +1157,231 @@ def ask_openai(system_text, user_text, max_tokens=350):
         return f"Erro ao gerar análise: {e}"
 
 
+
+ALCOHOL_KEYS = {
+    "cerveja_garrafa", "caipirinha", "gin_tonica", "whisky_dose", "vodka_mixer_zero",
+    "vinho_taca", "chopp", "aperol_spritz", "cerveja_lata", "cerveja_long", "cerveja_600", "destilado_dose"
+}
+
+
+def score_label(score):
+    if score >= 85:
+        return "dia forte"
+    if score >= 70:
+        return "dia bom"
+    if score >= 55:
+        return "dia parcial"
+    return "dia fraco"
+
+
+def calculate_daily_score(goals, meals, checklist, sleep, workout=None, hydration=None):
+    workout = workout or {}
+    hydration = hydration or {}
+    totals = meal_totals(meals)
+    kcal_goal = float(goals.get("kcal_daily", {}).get("target_value", 2400))
+    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 190))
+    water_goal = float(goals.get("water_daily_ml", {}).get("target_value", 4000))
+
+    unique_meal_types = {m.get("meal_type") for m in meals if m.get("meal_type") and m.get("meal_type") != "bebida"}
+    alcohol_items = [m for m in meals if (m.get("food_key") or "") in ALCOHOL_KEYS]
+    trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
+    sleep_hours = float(sleep.get("total_hours") or 0) if sleep else 0
+    cpap_used = bool(sleep.get("used_cpap")) if sleep else False
+    water_ml = float(hydration.get("water_ml") or 0)
+
+    # alimentação 30
+    food_score = 0
+    if totals["kcal"] > 0:
+        if totals["kcal"] <= kcal_goal * 1.08:
+            food_score += 15
+        elif totals["kcal"] <= kcal_goal * 1.20:
+            food_score += 10
+        elif totals["kcal"] <= kcal_goal * 1.35:
+            food_score += 6
+        else:
+            food_score += 2
+
+        if len(unique_meal_types) >= 3:
+            food_score += 10
+        elif len(unique_meal_types) == 2:
+            food_score += 6
+        elif len(unique_meal_types) == 1:
+            food_score += 3
+
+        if alcohol_items:
+            if totals["kcal"] <= kcal_goal * 1.12:
+                food_score += 3
+            else:
+                food_score += 1
+        else:
+            food_score += 5
+    food_score = max(0, min(30, food_score))
+
+    # proteína 20
+    protein_ratio = 0 if protein_goal <= 0 else totals["prot"] / protein_goal
+    if protein_ratio >= 1.0:
+        protein_score = 20
+    elif protein_ratio >= 0.9:
+        protein_score = 17
+    elif protein_ratio >= 0.8:
+        protein_score = 14
+    elif protein_ratio >= 0.65:
+        protein_score = 10
+    elif protein_ratio > 0:
+        protein_score = 5
+    else:
+        protein_score = 0
+
+    # treino 20
+    if trained:
+        duration = int(workout.get("duration_min") or 0)
+        workout_score = 20 if duration >= 30 else 16
+    else:
+        workout_score = 0
+
+    # sono + cpap 15
+    if sleep_hours >= 7 and (cpap_used or sleep.get("used_cpap") is None):
+        sleep_score = 15
+    elif sleep_hours >= 6:
+        sleep_score = 12
+    elif sleep_hours >= 5:
+        sleep_score = 8
+    elif sleep_hours > 0:
+        sleep_score = 4
+    else:
+        sleep_score = 0
+
+    # rotina 10
+    routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
+    routine_total = len(routine_items)
+    routine_done = sum(1 for i in routine_items if checklist.get(i["item_key"], {}).get("done"))
+    routine_score = 0 if routine_total == 0 else round((routine_done / routine_total) * 10)
+
+    # água 5
+    water_ratio = 0 if water_goal <= 0 else water_ml / water_goal
+    if water_ratio >= 1:
+        water_score = 5
+    elif water_ratio >= 0.8:
+        water_score = 4
+    elif water_ratio >= 0.6:
+        water_score = 3
+    elif water_ratio >= 0.35:
+        water_score = 2
+    elif water_ratio > 0:
+        water_score = 1
+    else:
+        water_score = 0
+
+    total_score = food_score + protein_score + workout_score + sleep_score + routine_score + water_score
+    if workout_score == 0 and protein_score <= 10:
+        total_score = min(total_score, 59)
+
+    breakdown = {
+        "Alimentação": {"value": int(food_score), "total": 30},
+        "Proteína": {"value": int(protein_score), "total": 20},
+        "Treino": {"value": int(workout_score), "total": 20},
+        "Sono + CPAP": {"value": int(sleep_score), "total": 15},
+        "Rotina": {"value": int(routine_score), "total": 10},
+        "Água": {"value": int(water_score), "total": 5},
+    }
+    return int(total_score), breakdown
+
+
+def build_daily_closure_analysis(dt_iso, score_total, breakdown, curve_info, meals, sleep, workout, hydration, goals):
+    totals = meal_totals(meals)
+    water_ml = float((hydration or {}).get("water_ml") or 0)
+    protein_goal = float(goals.get("protein_daily", {}).get("target_value", 190))
+    workout_done = breakdown["Treino"]["value"] > 0
+    sleep_hours = float((sleep or {}).get("total_hours") or 0)
+
+    strengths = []
+    faults = []
+
+    if breakdown["Alimentação"]["value"] >= 22:
+        strengths.append("o dia ficou razoavelmente coerente em calorias e estrutura")
+    if breakdown["Proteína"]["value"] >= 14:
+        strengths.append("a proteína ajudou a proteger melhor a massa magra")
+    if workout_done:
+        strengths.append("houve treino registrado")
+    if sleep_hours >= 6:
+        strengths.append("o sono deu uma base minimamente útil")
+
+    if breakdown["Proteína"]["value"] <= 10:
+        faults.append("a proteína ficou baixa para o objetivo")
+    if not workout_done:
+        faults.append("faltou treino num processo em que treino pesa muito")
+    if breakdown["Alimentação"]["value"] <= 15:
+        faults.append("a alimentação do dia ficou desorganizada ou fora da faixa")
+    if breakdown["Água"]["value"] <= 2:
+        faults.append("a água ficou abaixo do que ajuda aderência")
+    if breakdown["Sono + CPAP"]["value"] <= 8:
+        faults.append("o sono não sustentou bem o dia")
+
+    diagnosis = score_label(score_total)
+    strong_text = strengths[0] if strengths else "houve registro suficiente para não operar no escuro"
+    fault_text = faults[0] if faults else "não apareceu um gargalo dominante, mas ainda cabe melhorar execução"
+
+    if breakdown["Proteína"]["value"] <= 10:
+        next_action = "amanhã a prioridade é garantir proteína forte já no almoço e não deixar tudo para o jantar"
+    elif not workout_done:
+        next_action = "amanhã a prioridade é deixar o treino definido cedo, mesmo que seja um mínimo viável"
+    elif breakdown["Alimentação"]["value"] <= 15:
+        next_action = "amanhã a prioridade é fechar um dia mais limpo em calorias e com menos exceções"
+    elif breakdown["Sono + CPAP"]["value"] <= 8:
+        next_action = "amanhã a prioridade é proteger o sono e registrar CPAP com mais atenção"
+    else:
+        next_action = "amanhã a prioridade é repetir o básico com menos atrito"
+
+    if ai is not None:
+        try:
+            system = "Você é um assistente analítico de saúde. Seja direto, curto, sem coach e sem clichês. Responda em 4 frases com os títulos: Diagnóstico, Ponto forte, Principal falha, Ação para amanhã."
+            user = f"Data: {dt_iso}. Score: {score_total}/100 ({diagnosis}). Breakdown: {json.dumps(breakdown, ensure_ascii=False)}. Curva: {json.dumps(curve_info, ensure_ascii=False)}. kcal: {totals['kcal']:.0f}, proteína: {totals['prot']:.0f}/{protein_goal:.0f}, água: {water_ml:.0f} ml, sono: {sleep_hours:.1f} h, treino: {workout_done}."
+            text = ask_openai(system, user, max_tokens=220)
+            if text and not text.lower().startswith("erro") and "não está configurada" not in text.lower():
+                return text
+        except Exception:
+            pass
+
+    return (
+        f"Diagnóstico: {diagnosis}, com score {score_total}/100.\n\n"
+        f"Ponto forte: {strong_text}.\n\n"
+        f"Principal falha: {fault_text}.\n\n"
+        f"Ação para amanhã: {next_action}."
+    )
+
+
+def render_score_breakdown(breakdown):
+    html = []
+    for label, info in breakdown.items():
+        pct = 0 if info["total"] <= 0 else (info["value"] / info["total"]) * 100
+        html.append(
+            f"<div class='v3-break-row'><div class='v3-break-top'><span>{label}</span><span>{info['value']} / {info['total']}</span></div><div class='v3-break-bar'><div class='v3-break-fill' style='width:{pct:.1f}%'></div></div></div>"
+        )
+    st.markdown("".join(html), unsafe_allow_html=True)
+
+
+def render_today_curve_card(current_weight, target_date):
+    curve_info = get_weight_curve_status(current_weight, target_date)
+    curve_class_map = {
+        "sem_peso": "b",
+        "claramente_atrasado": "r",
+        "queda_rapida_demais": "y",
+        "na_curva_ideal": "g",
+        "dentro_da_faixa": "b",
+    }
+    klass = curve_class_map.get(curve_info["status"], "b")
+    st.markdown(
+        f"""
+        <div class='v3-card'>
+            <h4>Ritmo do peso</h4>
+            <div class='v3-caption'>Curva real vs. curva esperada</div>
+            <div style='margin-top:10px;'><span class='status {klass}'>{curve_info['label']}</span></div>
+            <div class='v3-caption' style='margin-top:10px;'>Hoje a curva ideal pede {curve_info['projected_ideal']:.1f} kg. O mínimo aceitável está em {curve_info['projected_min']:.1f} kg.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # ==================================================
 # UI HELPERS
 # ==================================================
@@ -1485,28 +1600,29 @@ def render_graph(end_date, goal_weight):
     else:
         df["peso_real"] = float("nan")
 
-    plot_df = df.set_index("date")[["peso_real", "curva_ideal", "curva_min"]]
-    st.line_chart(plot_df, height=260, use_container_width=True)
+    band = alt.Chart(df).mark_area(opacity=0.12, color="#facc15").encode(
+        x=alt.X("date:T", title=None),
+        y=alt.Y("curva_min:Q", title="kg", scale=alt.Scale(zero=False)),
+        y2="curva_ideal:Q"
+    )
+    ideal = alt.Chart(df).mark_line(color="#10b981", strokeWidth=3).encode(
+        x="date:T", y=alt.Y("curva_ideal:Q", title="kg", scale=alt.Scale(zero=False))
+    )
+    min_line = alt.Chart(df).mark_line(color="#facc15", strokeDash=[6,6], strokeWidth=2).encode(
+        x="date:T", y=alt.Y("curva_min:Q", title="kg", scale=alt.Scale(zero=False))
+    )
+    real = alt.Chart(df.dropna(subset=["peso_real"]))        .mark_line(color="#f8fafc", strokeWidth=3)        .encode(x="date:T", y=alt.Y("peso_real:Q", title="kg", scale=alt.Scale(zero=False)))
+    points = alt.Chart(df.dropna(subset=["peso_real"]))        .mark_circle(color="#f8fafc", size=50)        .encode(x="date:T", y="peso_real:Q")
+
+    chart = (band + min_line + ideal + real + points).properties(height=280).configure_view(strokeOpacity=0)
+    st.altair_chart(chart, use_container_width=True)
 
     monthly_targets = get_monthly_target_rows(end_date)
-    current_real = df["peso_real"].dropna()
-    if not current_real.empty:
-        last_real = float(current_real.iloc[-1])
-        curve_info = get_weight_curve_status(last_real, end_date)
-        st.caption(
-            f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · peso atual {last_real:.1f} kg · "
-            f"curva ideal hoje {curve_info['projected_ideal']:.1f} kg · status: {curve_info['label']}."
-        )
-    else:
-        st.caption(
-            f"Peso inicial {PROJECT_PROFILE['start_weight']:.1f} kg · sem linha real suficiente ainda."
-        )
-
     if monthly_targets:
-        st.markdown("**Metas mensais da curva ideal**")
-        cols = st.columns(min(4, len(monthly_targets)))
-        for idx, row in enumerate(monthly_targets[:4]):
-            cols[idx].metric(row["month_label"], f"{row['target_weight']:.1f} kg")
+        st.markdown("<div class='v3-card'><h4>Metas mensais da curva ideal</h4><div class='v3-list'>" + "".join([
+            f"<div class='v3-target-chip'><span>Meta {row['month_label']}</span><strong>{row['target_weight']:.1f} kg</strong></div>" for row in monthly_targets
+        ]) + "</div></div>", unsafe_allow_html=True)
+
 
 # ==================================================
 # PAGE: HOJE
@@ -1515,9 +1631,8 @@ def page_hoje():
     target = date_bar()
     target_date = st.session_state.sel_date
     goals = get_goals()
-    goal_weight = float(PROJECT_PROFILE["goal_weight_intermediate"])
     current_weight = get_weight(target)
-    display_weight = current_weight if current_weight is not None else get_last_known_weight(target)
+    display_weight = float(current_weight or PROJECT_PROFILE["start_weight"])
     curve_info = get_weight_curve_status(current_weight, target_date)
     sleep = get_sleep(target)
     workout = get_workout(target)
@@ -1525,50 +1640,97 @@ def page_hoje():
     checklist = get_checklist(target)
     meals = get_meals(target)
     closure = get_daily_closure(target)
+    totals = meal_totals(meals)
 
-    st.markdown('<div class="section-title">Hoje</div>', unsafe_allow_html=True)
-    render_day_summary_band(display_weight, goal_weight, meals, checklist, sleep, workout)
+    variation = display_weight - PROJECT_PROFILE["start_weight"]
+    focus_badges = []
+    if totals["prot"] < float(goals.get("protein_daily", {}).get("target_value", 190)) * 0.8:
+        focus_badges.append("Foco: proteína")
+    if not (bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))):
+        focus_badges.append("Foco: treino")
+    if float((hydration or {}).get("water_ml") or 0) < float(goals.get("water_daily_ml", {}).get("target_value", 4000)) * 0.7:
+        focus_badges.append("Foco: água")
+    if not sleep:
+        focus_badges.append("Foco: sono")
+    if not focus_badges:
+        focus_badges = ["Foco: manter consistência"]
 
-    curve_class_map = {
-        "sem_peso": "b",
-        "claramente_atrasado": "r",
-        "queda_rapida_demais": "y",
-        "na_curva_ideal": "g",
-        "dentro_da_faixa": "b",
-    }
-    curve_class = curve_class_map.get(curve_info["status"], "b")
+    chip_texts = [
+        focus_badges[0],
+        f"Sono {'registrado' if sleep else 'pendente'}",
+        f"{len([m for m in meals if m.get('meal_type') != 'bebida'])} refeições",
+        f"Água {float((hydration or {}).get('water_ml') or 0)/1000:.1f} L",
+    ]
 
+    st.markdown("<div class='app-shell'>", unsafe_allow_html=True)
     st.markdown(
         f"""
-        <div class="card card-tight">
-            <div class="meal-name">Ritmo do peso</div>
-            <div class="meal-detail">Status: <span class="status {curve_class}">{curve_info['label']}</span></div>
-            <div class="meal-detail" style="margin-top:8px;">Hoje a curva ideal projeta {curve_info['projected_ideal']:.1f} kg e o mínimo aceitável projeta {curve_info['projected_min']:.1f} kg.</div>
+        <div class='v3-hero'>
+            <div class='v3-kicker'>Resumo do dia</div>
+            <div class='v3-grid-2'>
+                <div>
+                    <div class='v3-weight'>{display_weight:.1f}</div>
+                    <div class='v3-sub'>kg hoje ou último peso válido · {variation:+.1f} kg desde o início oficial.</div>
+                    <div class='v3-badge-row'>
+                        {''.join([f"<span class='v3-badge'>{item}</span>" for item in chip_texts])}
+                    </div>
+                </div>
+                <div class='v3-card' style='margin-bottom:0;'>
+                    <h4>Status do ritmo</h4>
+                    <div class='v3-caption'>Leitura da curva nesta data</div>
+                    <div style='margin-top:12px;'><span class='status {'g' if curve_info['status']=='na_curva_ideal' else 'y' if curve_info['status']=='queda_rapida_demais' else 'r' if curve_info['status']=='claramente_atrasado' else 'b'}'>{curve_info['label']}</span></div>
+                    <div class='v3-caption' style='margin-top:12px;'>Curva ideal hoje: {curve_info['projected_ideal']:.1f} kg · mínimo aceitável: {curve_info['projected_min']:.1f} kg.</div>
+                </div>
+            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    c1, c2 = st.columns([2.2, 1])
+    render_graph(target_date, PROJECT_PROFILE["goal_weight_intermediate"])
+
+    c1, c2 = st.columns([1.1, 1])
     with c1:
-        pv = float(display_weight or PROJECT_PROFILE["start_weight"])
-        weight_input = st.number_input("Peso do dia", 50.0, 250.0, pv, 0.1, format="%.1f", key="today_weight")
-    with c2:
-        st.write("")
-        if st.button("Salvar peso", use_container_width=True, key="save_today_weight"):
+        st.markdown("<div class='v3-card'><h4>Peso do dia</h4><div class='v3-caption'>Registrar peso entra no gráfico e atualiza o ritmo.</div>", unsafe_allow_html=True)
+        weight_input = st.number_input("Peso do dia", 50.0, 250.0, display_weight, 0.1, format="%.1f", key="today_weight_v3")
+        if st.button("Salvar peso", use_container_width=True, key="save_today_weight_v3"):
             save_weight(target, weight_input)
             st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    with c2:
+        st.markdown("<div class='v3-card'><h4>Água do dia</h4><div class='v3-caption'>Meta formal: 4,0 L ajustável.</div>", unsafe_allow_html=True)
+        current_water = int(float((hydration or {}).get("water_ml") or 0))
+        water_input = st.number_input("Água total (ml)", 0, 10000, current_water, 250, key="water_v3")
+        r1, r2 = st.columns(2)
+        if r1.button("+300 ml", use_container_width=True, key="w300_v3"):
+            save_hydration(target, current_water + 300)
+            st.rerun()
+        if r2.button("+500 ml", use_container_width=True, key="w500_v3"):
+            save_hydration(target, current_water + 500)
+            st.rerun()
+        if st.button("Salvar água", use_container_width=True, key="save_water_v3"):
+            save_hydration(target, int(water_input))
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Gráfico de ritmo</div>', unsafe_allow_html=True)
-    render_graph(st.session_state.sel_date, goal_weight)
+    c3, c4 = st.columns(2)
+    with c3:
+        st.markdown("<div class='v3-card'><h4>Sono + CPAP</h4><div class='v3-caption'>Noite anterior, com CPAP dentro do mesmo bloco.</div>", unsafe_allow_html=True)
+        if sleep:
+            hours = float(sleep.get("total_hours") or 0)
+            ahi = sleep.get("ahi")
+            energy = sleep.get("energy_score")
+            cpap_hours = sleep.get("cpap_hours")
+            st.markdown(f"<div class='v3-mini-grid'><div class='v3-mini'><div class='l'>Sono total</div><div class='v'>{hours:.1f} h</div></div><div class='v3-mini'><div class='l'>AHI</div><div class='v'>{ahi if ahi is not None else '—'}</div></div><div class='v3-mini'><div class='l'>Energia</div><div class='v'>{energy if energy is not None else '—'}/10</div></div><div class='v3-mini'><div class='l'>CPAP</div><div class='v'>{float(cpap_hours or 0):.1f} h</div></div></div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<div class='v3-caption' style='margin-top:10px;'>Sem sono registrado para essa data.</div>", unsafe_allow_html=True)
+        with st.expander("Preencher ou editar sono", expanded=not bool(sleep)):
+            page_sono_quick(target, sleep)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Sono + CPAP</div>', unsafe_allow_html=True)
-    page_sono_quick(target, sleep)
-
-    st.markdown('<div class="section-title">Treino, água e alimentação</div>', unsafe_allow_html=True)
-    left, right = st.columns([1.1, 1])
-    with left:
-        trained = bool(checklist.get("treino", {}).get("done")) or bool(workout.get("workout_type"))
+    with c4:
+        st.markdown("<div class='v3-card'><h4>Treino do dia</h4><div class='v3-caption'>Treino pesa 20 pontos no fechamento.</div>", unsafe_allow_html=True)
+        trained = bool(checklist.get("treino", {}).get("done")) or bool((workout or {}).get("workout_type"))
         if trained:
             summary = []
             if workout.get("workout_type"):
@@ -1577,82 +1739,69 @@ def page_hoje():
                 summary.append(workout["strength_split"])
             if workout.get("duration_min"):
                 summary.append(f"{workout['duration_min']} min")
-            if workout.get("distance_km"):
-                summary.append(f"{float(workout['distance_km']):.1f} km")
-            detail = " · ".join(summary) if summary else "Treino registrado"
-            st.markdown(f'<div class="meal-card"><div class="meal-name">Treino</div><div class="meal-detail">{detail}</div></div>', unsafe_allow_html=True)
+            st.markdown(f"<div class='v3-list-item'><span>Treino registrado</span><strong>{' · '.join(summary) if summary else 'feito'}</strong></div>", unsafe_allow_html=True)
         else:
-            st.markdown('<div class="meal-card"><div class="meal-name">Treino</div><div class="meal-detail">Sem treino marcado hoje.</div></div>', unsafe_allow_html=True)
-        render_hydration_card(target, hydration, goals)
+            st.markdown("<div class='v3-list-item'><span>Sem treino marcado</span><strong>0/20</strong></div>", unsafe_allow_html=True)
+        with st.expander("Editar treino", expanded=False):
+            page_treino_inner(target)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        totals = meal_totals(meals)
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown('**Alimentação resumida**')
-        macro_pills(totals["kcal"], totals["prot"], totals["carb"], totals["fat"])
-        klass, label = food_status_class(totals["kcal"], totals["prot"], goals)
-        if label:
-            st.markdown(f'<span class="status {klass}">{label}</span>', unsafe_allow_html=True)
-        if meals:
-            meal_groups = []
-            for mk, mc in MEAL_CONFIG.items():
-                mk_items = [m for m in meals if m["meal_type"] == mk]
-                if mk_items:
-                    meal_groups.append(f"{mc['label']} ({sum(float(m.get('kcal') or 0) for m in mk_items):.0f} kcal)")
-            st.caption(" · ".join(meal_groups))
-        else:
-            st.caption("Nenhuma refeição registrada ainda.")
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown("<div class='v3-card'><h4>Alimentação resumida</h4><div class='v3-caption'>O fechamento do dia usa alimentação 30 + proteína 20.</div>", unsafe_allow_html=True)
+    st.markdown(
+        f"<div class='v3-stats'><div class='v3-stat'><div class='l'>kcal</div><div class='v'>{totals['kcal']:.0f}</div></div><div class='v3-stat'><div class='l'>prot</div><div class='v'>{totals['prot']:.0f}g</div></div><div class='v3-stat'><div class='l'>carb</div><div class='v'>{totals['carb']:.0f}g</div></div><div class='v3-stat'><div class='l'>gord</div><div class='v'>{totals['fat']:.0f}g</div></div></div>",
+        unsafe_allow_html=True,
+    )
+    food_map = {f['food_key']: f for f in get_foods()}
+    grouped = []
+    for mk, cfg in MEAL_CONFIG.items():
+        items = [m for m in meals if m.get('meal_type') == mk]
+        if not items:
+            continue
+        kcal = sum(float(m.get("kcal") or 0) for m in items)
+        names = ", ".join(food_map.get(m.get("food_key"), {}).get("name", (m.get("food_key") or "").replace("_", " ")) for m in items[:3])
+        grouped.append(f"<div class='v3-list-item'><span>{cfg['label']}</span><strong>{kcal:.0f} kcal · {names}</strong></div>")
+    if grouped:
+        st.markdown("<div class='v3-list'>" + "".join(grouped) + "</div>", unsafe_allow_html=True)
+    else:
+        st.markdown("<div class='v3-caption' style='margin-top:10px;'>Nenhuma refeição registrada ainda.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Rotina do dia</div>', unsafe_allow_html=True)
-    checklist_items = [i for i in get_checklist_items() if is_routine_item(i)]
-    slots = {"jejum": "☀️ Jejum", "manha": "Manhã", "almoco": "Almoço", "jantar": "Jantar", "noite": "Noite", "variavel": "Variável"}
-    current_slot = None
-    done_count = 0
-    for item in checklist_items:
-        slot = item.get("time_slot") or "variavel"
-        if slot != current_slot:
-            current_slot = slot
-            st.markdown(f"**{slots.get(slot, slot)}**")
+    routine_items = [i for i in get_checklist_items() if is_routine_item(i)]
+    st.markdown("<div class='v3-card'><h4>Rotina</h4><div class='v3-caption'>Só o que é rotina previsível: remédios, suplementos, treino e CPAP.</div>", unsafe_allow_html=True)
+    for item in routine_items:
         checked = checklist.get(item["item_key"], {}).get("done", False)
-        if checked:
-            done_count += 1
-        dose = f" · {item['dosage']}" if item.get("dosage") else ""
-        instruction = item.get("instruction") or ""
-        st.markdown('<div class="check-card">', unsafe_allow_html=True)
-        new_val = st.checkbox(f"{item['name']}{dose}", value=checked, key=f"check_{target}_{item['item_key']}")
-        if instruction:
-            st.caption(instruction)
-        st.markdown('</div>', unsafe_allow_html=True)
+        cols = st.columns([1, 8, 2])
+        with cols[0]:
+            new_val = st.checkbox("", value=checked, key=f"v3_check_{target}_{item['item_key']}")
+        with cols[1]:
+            st.markdown(f"**{item['name']}**")
+            if item.get("instruction"):
+                st.caption(item.get("instruction"))
+        with cols[2]:
+            st.caption((item.get("time_slot") or "").capitalize())
         if new_val != checked:
             save_check(target, item["item_key"], new_val)
             st.rerun()
-    if checklist_items:
-        pct = int((done_count / len(checklist_items)) * 100)
-        st.caption(f"Aderência da rotina: {done_count}/{len(checklist_items)} ({pct}%)")
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Leitura do dia</div>', unsafe_allow_html=True)
-    review_html = build_day_review(target, goals, meals, checklist, sleep, current_weight, workout=workout, hydration=hydration)
-    st.markdown(review_html, unsafe_allow_html=True)
-
-    score_data = compute_daily_score(goals, meals, checklist, sleep, workout=workout, hydration=hydration)
-
-    st.markdown('<div class="section-title">Finalizar dia</div>', unsafe_allow_html=True)
-    if st.button("Finalizar dia e gerar score", key=f"finalize_{target}", use_container_width=True):
-        analysis_text = re.sub(r'<[^>]+>', ' ', review_html)
-        payload = {
-            "date": target,
-            "score_total": score_data["total"],
-            "score_label": score_data["label"],
-            "score_breakdown": json.dumps(score_data["breakdown"], ensure_ascii=False),
-            "analysis_text": analysis_text.strip(),
-            "closed_at": datetime.now(APP_TZ).isoformat(),
-        }
-        ok, msg = save_daily_closure(payload)
+    st.markdown("<div class='v3-card'><h4>Finalizar dia</h4><div class='v3-caption'>Ao finalizar, o app calcula a nota do dia, gera análise e salva o fechamento.</div>", unsafe_allow_html=True)
+    if st.button("Finalizar dia e gerar score", use_container_width=True, key="finalize_day_v3"):
+        score_total, breakdown = calculate_daily_score(goals, meals, checklist, sleep, workout=workout, hydration=hydration)
+        analysis_text = build_daily_closure_analysis(target, score_total, breakdown, curve_info, meals, sleep, workout, hydration, goals)
+        ok, err = save_daily_closure(
+            target,
+            {
+                "score_total": score_total,
+                "score_label": score_label(score_total),
+                "score_breakdown": breakdown,
+                "analysis_text": analysis_text,
+                "closed_at": datetime.now(APP_TZ).isoformat(),
+            },
+        )
         if ok:
             st.success("Dia finalizado.")
         else:
-            st.warning("Não foi possível salvar o fechamento no banco ainda. Rode o SQL da tabela daily_closure no Supabase.")
+            st.warning("Não foi possível salvar no banco. Rode o SQL da tabela daily_closure.")
             st.code("""create table if not exists public.daily_closure (
   date date primary key,
   score_total integer,
@@ -1665,18 +1814,24 @@ def page_hoje():
 
     closure = get_daily_closure(target)
     if closure:
-        saved_score = {
-            "total": int(closure.get("score_total") or 0),
-            "label": closure.get("score_label") or "dia parcial",
-            "class": "g" if int(closure.get("score_total") or 0) >= 70 else "y" if int(closure.get("score_total") or 0) >= 55 else "r",
-            "breakdown": json.loads(closure.get("score_breakdown") or "{}") if isinstance(closure.get("score_breakdown"), str) else (closure.get("score_breakdown") or {}),
-        }
-        for key in ["alimentacao", "proteina", "treino", "sono_cpap", "rotina", "agua"]:
-            saved_score["breakdown"].setdefault(key, 0)
-        render_score_card(saved_score)
-        st.markdown('<div class="card"><div class="section-title" style="margin-top:0">Análise final salva</div><div class="muted">' + (closure.get("analysis_text") or "") + '</div></div>', unsafe_allow_html=True)
+        breakdown = closure.get("score_breakdown") or {}
+        if isinstance(breakdown, str):
+            try:
+                breakdown = json.loads(breakdown)
+            except Exception:
+                breakdown = {}
+        st.markdown(
+            f"<div class='v3-score-wrap'><div class='v3-score-box'><div class='v3-score-label'>Score do dia</div><div class='v3-score-value'>{int(closure.get('score_total') or 0)} / 100</div><div class='v3-score-sub'>{closure.get('score_label') or ''}</div></div><div class='status g'>Fechado</div></div>",
+            unsafe_allow_html=True,
+        )
+        if breakdown:
+            render_score_breakdown(breakdown)
+        analysis_text = closure.get("analysis_text") or ""
+        st.markdown(f"<div class='v3-analysis'>{''.join([f'<p>{p}</p>' for p in analysis_text.splitlines() if p.strip()])}</div>", unsafe_allow_html=True)
     else:
-        render_score_card(score_data)
+        st.markdown("<div class='v3-caption' style='margin-top:12px;'>O dia ainda não foi finalizado.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # ==================================================
 # QUICK SLEEP ON TODAY
