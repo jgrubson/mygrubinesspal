@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>MyGrubinessPal</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://unpkg.com/recharts@2.12.7/umd/Recharts.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { font-family: 'Plus Jakarta Sans', -apple-system, sans-serif; box-sizing: border-box; }
+  body { margin: 0; background: #f0f2f7; color: #1e293b; -webkit-font-smoothing: antialiased; }
+  input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+  .fade-in { animation: fadeIn 0.3s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo } = React;
+const { ComposedChart, AreaChart, Area, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } = Recharts;
+
+/* ═══ SUPABASE CLIENT ═══ */
+const SB_URL = "{{SUPABASE_URL}}";
+const SB_KEY = "{{SUPABASE_KEY}}";
+const hdrs = { 'apikey': SB_KEY, 'Authorization': `Bearer ${SB_KEY}`, 'Content-Type': 'application/json' };
+
+const sb = {
+  async get(table, params = "") {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/${table}?${params}`, { headers: hdrs });
+      return r.ok ? await r.json() : [];
+    } catch { return []; }
+  },
+  async upsert(table, data) {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+        method: 'POST', headers: { ...hdrs, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify(data)
+      });
+      return r.ok;
+    } catch { return false; }
+  },
+  async insert(table, data) {
+    try {
+      const r = await fetch(`${SB_URL}/rest/v1/${table}`, {
+        method: 'POST', headers: { ...hdrs, 'Prefer': 'return=representation' },
+        body: JSON.stringify(data)
+      });
+      return r.ok ? await r.json() : null;
+    } catch { return null; }
+  },
+  async del(table, params) {
+    try {
+      await fetch(`${SB_URL}/rest/v1/${table}?${params}`, { method: 'DELETE', headers: hdrs });
+      return true;
+    } catch { return false; }
+  }
+};
+
+/* ═══ HELPERS ═══ */
+const fmt = d => d.toISOString().slice(0, 10);
+const today = () => new Date();
+const dayLabel = d => {
+  const t = today();
+  const ds = fmt(d), ts = fmt(t);
+  if (ds === ts) return "Hoje";
+  const y = new Date(t); y.setDate(y.getDate() - 1);
+  if (ds === fmt(y)) return "Ontem";
+  return ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][d.getDay()];
+};
+const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+
+const PROJECT = { startDate: new Date(2026,2,25), startWeight: 143.7, goalInt: 99.9, goalFinal: 90.0, lossIdeal: 0.8, lossMin: 0.4 };
+
+function projWeight(d, rate) {
+  const weeks = (d - PROJECT.startDate) / (7*864e5);
+  if (weeks <= 0) return PROJECT.startWeight;
+  return Math.max(PROJECT.goalFinal, +(PROJECT.startWeight - weeks * rate).toFixed(1));
+}
+
+function curveStatus(w, d) {
+  if (!w) return { status: "sem_peso", label: "Sem peso registrado", color: "#64748b" };
+  const ideal = projWeight(d, PROJECT.lossIdeal);
+  const min = projWeight(d, PROJECT.lossMin);
+  if (w <= ideal) return { status: "abaixo_ideal", label: "Abaixo da curva ideal!", color: "#16a34a" };
+  if (w <= min) return { status: "na_faixa", label: "Dentro da faixa esperada", color: "#2563eb" };
+  return { status: "acima", label: "Acima da curva mínima", color: "#d97706" };
+}
+
+/* ═══ SCORE ═══ */
+function calcScore({ kcal, prot, trained, sleepH, routinePct, waterPct, isTraining }) {
+  const kt = isTraining ? 2300 : 2100;
+  let alim = 0, pr = 0, tr = 0, so = 0, ro = 0, ag = 0;
+  const kr = kcal / kt;
+  if (kr >= 0.8 && kr <= 1.1) alim = 25; else if (kr > 0.5) alim = 15; else if (kr > 0) alim = 8;
+  alim += 5;
+  if (prot >= 180) pr = 20; else if (prot >= 140) pr = 12; else if (prot > 50) pr = 5;
+  tr = trained ? 20 : 0;
+  if (sleepH >= 7) so = 15; else if (sleepH >= 6) so = 10; else if (sleepH > 0) so = 5;
+  ro = Math.round(routinePct * 10);
+  if (waterPct >= 0.85) ag = 5; else if (waterPct >= 0.5) ag = 3; else if (waterPct > 0) ag = 1;
+  let tot = alim + pr + tr + so + ro + ag;
+  if (!trained && pr <= 5) tot = Math.min(tot, 59);
+  return { tot, alim, pr, tr, so, ro, ag };
+}
+
+/* ═══ CARD COMPONENT ═══ */
+const Card = ({ children, className = "" }) => (
+  <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 p-4 mb-3 fade-in ${className}`}>{children}</div>
+);
+const IconBox = ({ bg, children }) => (
+  <div className={`w-10 h-10 rounded-xl ${bg} flex items-center justify-center text-lg flex-shrink-0`}>{children}</div>
+);
+const Badge = ({ color, children }) => (
+  <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: color + '15', color }}>{children}</span>
+);
+
+/* ═══ CHART TOOLTIP ═══ */
+const CTooltip = ({ active, payload }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-2 text-xs">
+      {payload.map((p, i) => p.value && (
+        <p key={i} className="font-semibold" style={{ color: p.color }}>
+          {p.dataKey === "real" ? "Real" : p.dataKey === "ideal" ? "Ideal" : "Mínima"}: {p.value} kg
+        </p>
+      ))}
+    </div>
+  );
+};
+
+/* ═══ MAIN APP ═══ */
+function App() {
+  const [page, setPage] = useState("hoje");
+  const [dateObj, setDateObj] = useState(today());
+  const [loading, setLoading] = useState(true);
+
+  // Data
+  const [weight, setWeight] = useState(null);
+  const [weightInput, setWeightInput] = useState("");
+  const [weightHist, setWeightHist] = useState([]);
+  const [sleep, setSleep] = useState(null);
+  const [workout, setWorkout] = useState(null);
+  const [waterMl, setWaterMl] = useState(0);
+  const [meals, setMeals] = useState([]);
+  const [checks, setChecks] = useState({});
+  const [checkItems, setCheckItems] = useState([]);
+  const [foods, setFoods] = useState([]);
+  const [showScore, setShowScore] = useState(false);
+
+  // Forms
+  const [showWeightForm, setShowWeightForm] = useState(false);
+  const [showSleepForm, setShowSleepForm] = useState(false);
+  const [showWorkoutForm, setShowWorkoutForm] = useState(false);
+  const [showMealForm, setShowMealForm] = useState(null);
+  const [showChecklist, setShowChecklist] = useState(false);
+
+  const dt = fmt(dateObj);
+
+  // Load data
+  const loadDay = useCallback(async () => {
+    setLoading(true);
+    setShowScore(false);
+    const [w, wh, sl, wo, hy, ml, ci, ck, fd] = await Promise.all([
+      sb.get("daily_weight", `date=eq.${dt}`),
+      sb.get("daily_weight", `date=gte.${fmt(new Date(dateObj.getTime() - 90*864e5))}&date=lte.${dt}&order=date`),
+      sb.get("sleep_cpap", `date=eq.${dt}`),
+      sb.get("workout_logs", `date=eq.${dt}`),
+      sb.get("hydration_daily", `date=eq.${dt}`),
+      sb.get("meals", `date=eq.${dt}&order=meal_type`),
+      sb.get("checklist_items", `active=eq.true&order=sort_order`),
+      sb.get("checklist_daily", `date=eq.${dt}`),
+      sb.get("food_library", `active=eq.true&order=name`),
+    ]);
+    setWeight(w[0]?.weight_kg ?? null);
+    setWeightInput(w[0]?.weight_kg?.toString() ?? "");
+    setWeightHist(wh);
+    setSleep(sl[0] ?? null);
+    setWorkout(wo[0] ?? null);
+    setWaterMl(hy[0]?.water_ml ?? 0);
+    setMeals(ml);
+    setCheckItems(ci);
+    const cm = {}; ck.forEach(c => { cm[c.item_key] = c.done; }); setChecks(cm);
+    setFoods(fd);
+    setLoading(false);
+  }, [dt]);
+
+  useEffect(() => { loadDay(); }, [loadDay]);
+
+  // Actions
+  const saveWeight = async () => {
+    const v = parseFloat(weightInput);
+    if (!v || v < 50 || v > 250) return;
+    await sb.upsert("daily_weight", { date: dt, weight_kg: v });
+    await loadDay();
+    setShowWeightForm(false);
+  };
+
+  const addWater = async (ml) => {
+    const nw = waterMl + ml;
+    setWaterMl(nw);
+    await sb.upsert("hydration_daily", { date: dt, water_ml: nw });
+  };
+
+  const toggleCheck = async (key) => {
+    const nv = !checks[key];
+    setChecks(p => ({ ...p, [key]: nv }));
+    await sb.upsert("checklist_daily", { date: dt, item_key: key, done: nv });
+  };
+
+  const deleteMeal = async (id) => {
+    await sb.del("meals", `id=eq.${id}`);
+    await loadDay();
+  };
+
+  // Derived
+  const totMacros = meals.reduce((a, m) => ({
+    k: a.k + (m.kcal || 0), p: a.p + (m.protein_g || 0),
+    c: a.c + (m.carbs_g || 0), f: a.f + (m.fat_g || 0)
+  }), { k: 0, p: 0, c: 0, f: 0 });
+
+  const delta = weight ? +(weight - PROJECT.startWeight).toFixed(1) : null;
+  const cs = curveStatus(weight, dateObj);
+  const allDone = Object.values(checks).filter(Boolean).length;
+  const wp = Math.min(100, (waterMl / 4000) * 100);
+  const trained = !!workout?.workout_type || !!checks.treino;
+
+  // Chart data
+  const chartData = useMemo(() => {
+    const start = PROJECT.startDate;
+    const end = new Date(Math.max(dateObj.getTime(), dateObj.getTime() + 30*864e5));
+    const data = [];
+    let d = new Date(start);
+    const histMap = {};
+    weightHist.forEach(h => { histMap[h.date] = +h.weight_kg; });
+    while (d <= end) {
+      const k = fmt(d);
+      const entry = {
+        date: k, label: `${d.getDate()}/${d.getMonth()+1}`,
+        ideal: projWeight(d, PROJECT.lossIdeal),
+        min: projWeight(d, PROJECT.lossMin),
+      };
+      if (histMap[k] !== undefined) entry.real = histMap[k];
+      data.push(entry);
+      d = new Date(d.getTime() + 864e5);
+    }
+    return data.filter((_, i) => i % 2 === 0 || data[i]?.real);
+  }, [weightHist, dateObj]);
+
+  const monthly = useMemo(() => {
+    const ms = [];
+    const labels = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    for (let m = PROJECT.startDate.getMonth(); m < 12; m++) {
+      const end = new Date(2026, m + 1, 0);
+      const w = projWeight(end, PROJECT.lossIdeal);
+      if (w < PROJECT.startWeight) ms.push({ m: labels[m], w });
+      if (ms.length >= 4) break;
+    }
+    return ms;
+  }, []);
+
+  const sc = calcScore({
+    kcal: totMacros.k, prot: totMacros.p, trained,
+    sleepH: sleep?.total_hours || 0, routinePct: checkItems.length ? allDone / checkItems.length : 0,
+    waterPct: waterMl / 4000, isTraining: trained
+  });
+  const scBand = sc.tot >= 85 ? { l: "Dia forte", c: "#16a34a" }
+    : sc.tot >= 70 ? { l: "Dia bom", c: "#16a34a" }
+    : sc.tot >= 55 ? { l: "Dia parcial", c: "#d97706" }
+    : { l: "Dia fraco", c: "#dc2626" };
+
+  const mealTypes = [
+    { key: "cafe", icon: "☕", label: "Café da manhã" },
+    { key: "almoco", icon: "🍚", label: "Almoço" },
+    { key: "lanche", icon: "🥪", label: "Lanche" },
+    { key: "jantar", icon: "🍽️", label: "Jantar" },
+    { key: "ceia", icon: "🌙", label: "Ceia" },
+    { key: "bebida", icon: "🥤", label: "Bebidas" },
+  ];
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center" style={{background:'#f0f2f7'}}>
+      <div className="text-center">
+        <div className="text-2xl font-black text-gray-800 mb-2">MyGrubinessPal</div>
+        <div className="text-sm text-gray-400">Carregando...</div>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen pb-20" style={{ background: '#f0f2f7' }}>
+
+      {/* ═══ HEADER ═══ */}
+      <div className="px-4 pt-4 pb-5 rounded-b-3xl shadow-lg" style={{ background: 'linear-gradient(135deg, #1a2744, #243356)' }}>
+        <div className="text-lg font-extrabold text-white tracking-tight mb-3">MyGrubinessPal</div>
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={() => setDateObj(d => new Date(d.getTime() - 864e5))} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70">◀</button>
+          <div className="text-center">
+            <div className="text-white font-bold">{dayLabel(dateObj)}, {dateObj.getDate()} de {meses[dateObj.getMonth()]}</div>
+          </div>
+          <button onClick={() => setDateObj(d => new Date(d.getTime() + 864e5))} className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white/70">▶</button>
+        </div>
+
+        {/* Hero */}
+        <div className="bg-white/10 backdrop-blur rounded-2xl p-4 border border-white/10">
+          <div className="text-xs font-bold text-emerald-300 uppercase tracking-widest mb-1">Peso atual</div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-4xl font-black text-white">{weight ?? "—"}</span>
+            <span className="text-lg text-white/50 font-bold">kg</span>
+            {!weight && <button onClick={() => setShowWeightForm(true)} className="ml-2 text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold">Registrar</button>}
+          </div>
+          {delta !== null && (
+            <div className="flex items-center gap-3 mt-2">
+              <span className="text-sm font-bold text-emerald-400">{delta > 0 ? '+' : ''}{delta} kg</span>
+              <span className="text-xs text-white/40">desde o início</span>
+              <span className="text-xs text-white/40">Meta: <span className="text-white/70 font-bold">{PROJECT.goalInt} kg</span></span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="max-w-lg mx-auto px-4 -mt-1">
+
+        {/* ═══ WEIGHT FORM ═══ */}
+        {showWeightForm && (
+          <Card>
+            <div className="text-sm font-bold text-gray-700 mb-2">Registrar peso</div>
+            <div className="flex gap-2">
+              <input type="number" step="0.1" value={weightInput} onChange={e => setWeightInput(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-xl border border-gray-200 text-lg font-bold" placeholder="Ex: 142.5" />
+              <button onClick={saveWeight} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm">Salvar</button>
+            </div>
+          </Card>
+        )}
+
+        {/* ═══ CHART ═══ */}
+        <Card className="mt-4">
+          <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Curva de peso</div>
+          <ResponsiveContainer width="100%" height={170}>
+            <ComposedChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+              <defs><linearGradient id="bf" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#22c55e" stopOpacity={0.06}/><stop offset="100%" stopColor="#22c55e" stopOpacity={0.01}/></linearGradient></defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="label" tick={{ fill: '#94a3b8', fontSize: 9 }} tickLine={false} axisLine={false} interval={10} />
+              <YAxis tick={{ fill: '#94a3b8', fontSize: 9 }} tickLine={false} axisLine={false} domain={['dataMin - 2', 'dataMax + 1']} />
+              <Tooltip content={<CTooltip />} />
+              <Area type="monotone" dataKey="min" stroke="none" fill="url(#bf)" />
+              <Line type="monotone" dataKey="ideal" stroke="#22c55e" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+              <Line type="monotone" dataKey="min" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 4" dot={false} />
+              <Line type="monotone" dataKey="real" stroke="#2563eb" strokeWidth={2.5} dot={{ fill: '#2563eb', r: 2, strokeWidth: 0 }} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="flex gap-3 mt-1 text-xs text-gray-400">
+            <span>🟢 Ideal</span><span>🟡 Mínima</span><span>🔵 Real</span>
+          </div>
+          <div className="flex gap-2 mt-2">
+            {monthly.map(t => (
+              <div key={t.m} className="flex-1 text-center py-1 rounded-lg bg-gray-50 border border-gray-100">
+                <div className="text-xs text-gray-400">{t.m}</div>
+                <div className="text-xs font-bold text-gray-700">{t.w} kg</div>
+              </div>
+            ))}
+          </div>
+          <p className="text-center text-sm mt-2 font-semibold" style={{ color: cs.color }}>{cs.label}</p>
+        </Card>
+
+        {/* ═══ SONO ═══ */}
+        <Card>
+          <button onClick={() => setShowSleepForm(!showSleepForm)} className="w-full flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <IconBox bg="bg-indigo-50">😴</IconBox>
+              <div className="text-left">
+                <div className="text-sm font-bold text-gray-800">Sono & CPAP</div>
+                <div className="text-xs text-gray-400">
+                  {sleep ? <><span className="font-semibold text-gray-600">{sleep.total_hours?.toFixed(1)}h</span> · CPAP {sleep.cpap_hours || 0}h · AHI {sleep.ahi || '—'}</> : "Não registrado"}
+                </div>
+              </div>
+            </div>
+            <span className="text-gray-300">{showSleepForm ? '▲' : '▼'}</span>
+          </button>
+          {showSleepForm && <SleepForm dt={dt} data={sleep} onSave={loadDay} onClose={() => setShowSleepForm(false)} />}
+        </Card>
+
+        {/* ═══ TREINO ═══ */}
+        <Card>
+          <button onClick={() => setShowWorkoutForm(!showWorkoutForm)} className="w-full flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <IconBox bg="bg-blue-50">🏋️</IconBox>
+              <div className="text-left">
+                <div className="text-sm font-bold text-gray-800">Treino</div>
+                <div className="text-xs text-gray-400">
+                  {workout?.workout_type ? <><span className="font-semibold text-gray-600">{workout.workout_type}</span>{workout.strength_split ? ` · ${workout.strength_split}` : ''}{workout.duration_min ? ` · ${workout.duration_min} min` : ''}</> : "Não registrado"}
+                </div>
+              </div>
+            </div>
+            <span className="text-gray-300">{showWorkoutForm ? '▲' : '▼'}</span>
+          </button>
+          {showWorkoutForm && <WorkoutForm dt={dt} data={workout} onSave={loadDay} onClose={() => setShowWorkoutForm(false)} />}
+        </Card>
+
+        {/* ═══ ÁGUA ═══ */}
+        <Card>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-3">
+              <IconBox bg="bg-cyan-50">💧</IconBox>
+              <div>
+                <div className="text-sm font-bold text-gray-800">Água</div>
+                <div className="text-xs text-gray-400"><span className="font-semibold text-gray-600">{(waterMl/1000).toFixed(1)} L</span> de 4.0 L</div>
+              </div>
+            </div>
+            <Badge color={wp >= 85 ? '#16a34a' : wp >= 50 ? '#d97706' : '#dc2626'}>{Math.round(wp)}%</Badge>
+          </div>
+          <div className="h-2 rounded-full bg-gray-100 overflow-hidden mb-3">
+            <div className="h-full rounded-full transition-all" style={{ width: `${wp}%`, background: wp >= 85 ? '#22c55e' : wp >= 50 ? '#f59e0b' : '#ef4444' }} />
+          </div>
+          <div className="flex gap-2">
+            {[250, 300, 500].map(ml => (
+              <button key={ml} onClick={() => addWater(ml)} className="flex-1 py-2 rounded-xl bg-gray-50 border border-gray-200 text-xs font-bold text-gray-600 active:scale-95 transition-transform">+{ml}ml</button>
+            ))}
+          </div>
+        </Card>
+
+        {/* ═══ ALIMENTAÇÃO ═══ */}
+        <Card>
+          <div className="flex items-center gap-3 mb-3">
+            <IconBox bg="bg-orange-50">🍎</IconBox>
+            <div>
+              <div className="text-sm font-bold text-gray-800">Alimentação</div>
+              <div className="text-xs text-gray-400"><span className="font-semibold text-gray-600">{Math.round(totMacros.k)} kcal</span> · {Math.round(totMacros.p)}g prot</div>
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {[
+              { l: "kcal", v: totMacros.k, t: trained ? 2300 : 2100, c: "#1e293b" },
+              { l: "prot", v: totMacros.p, t: 200, c: "#16a34a" },
+              { l: "carb", v: totMacros.c, t: trained ? 190 : 135, c: "#2563eb" },
+              { l: "gord", v: totMacros.f, t: 70, c: "#d97706" },
+            ].map(m => (
+              <div key={m.l} className="text-center">
+                <div className="text-xs text-gray-400 uppercase font-bold">{m.l}</div>
+                <div className="text-sm font-extrabold" style={{ color: m.c }}>{Math.round(m.v)}</div>
+                <div className="h-1 rounded-full bg-gray-100 mt-0.5 overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${Math.min(100, (m.v / m.t) * 100)}%`, background: m.c }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          {mealTypes.map(mt => {
+            const mi = meals.filter(m => m.meal_type === mt.key);
+            const mk = mi.reduce((s, m) => s + (m.kcal || 0), 0);
+            return (
+              <div key={mt.key} className="border-t border-gray-50">
+                <button onClick={() => setShowMealForm(showMealForm === mt.key ? null : mt.key)} className="w-full flex items-center justify-between py-2.5">
+                  <div className="flex items-center gap-2">
+                    <span>{mt.icon}</span>
+                    <span className="text-sm font-semibold text-gray-700">{mt.label}</span>
+                    {mk > 0 && <span className="text-xs text-gray-400">{Math.round(mk)} kcal</span>}
+                  </div>
+                  <span className="text-xs text-emerald-500 font-bold">+ Adicionar</span>
+                </button>
+                {mi.map(item => (
+                  <div key={item.id} className="flex justify-between items-center py-1 pl-7 text-xs">
+                    <span className="text-gray-500">{item.food_key?.replace(/_/g, ' ')} · {item.quantity_g}g</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400">{Math.round(item.kcal)} kcal</span>
+                      <button onClick={() => deleteMeal(item.id)} className="text-red-300 text-xs">✕</button>
+                    </div>
+                  </div>
+                ))}
+                {showMealForm === mt.key && <MealForm dt={dt} mealType={mt.key} foods={foods} onSave={() => { setShowMealForm(null); loadDay(); }} />}
+              </div>
+            );
+          })}
+        </Card>
+
+        {/* ═══ ROTINA ═══ */}
+        <Card>
+          <button onClick={() => setShowChecklist(!showChecklist)} className="w-full flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <IconBox bg="bg-emerald-50">✅</IconBox>
+              <div className="text-left">
+                <div className="text-sm font-bold text-gray-800">Rotina · Remédios · Suplementos</div>
+                <div className="text-xs text-gray-400"><span className="font-semibold text-gray-600">{allDone}/{checkItems.length}</span> executados</div>
+              </div>
+            </div>
+            <span className="text-gray-300">{showChecklist ? '▲' : '▼'}</span>
+          </button>
+          {showChecklist && (
+            <div className="mt-3 space-y-1">
+              {checkItems.map(item => (
+                <button key={item.item_key} onClick={() => toggleCheck(item.item_key)}
+                  className="w-full flex items-center gap-3 py-2 px-1 rounded-lg hover:bg-gray-50 text-left">
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 ${checks[item.item_key] ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300'}`}>
+                    {checks[item.item_key] && <span className="text-white text-xs">✓</span>}
+                  </div>
+                  <div>
+                    <div className={`text-sm font-medium ${checks[item.item_key] ? 'text-gray-400 line-through' : 'text-gray-700'}`}>{item.name}{item.dosage ? ` · ${item.dosage}` : ''}</div>
+                    {item.instruction && <div className="text-xs text-gray-400">{item.instruction}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        {/* ═══ FINALIZAR DIA ═══ */}
+        {!showScore ? (
+          <button onClick={() => setShowScore(true)}
+            className="w-full py-4 rounded-2xl font-bold text-base text-white active:scale-[0.98] transition-all shadow-lg mb-3"
+            style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', boxShadow: '0 8px 24px rgba(22,163,74,0.3)' }}>
+            Finalizar dia
+          </button>
+        ) : (
+          <Card>
+            <div className="text-center mb-3">
+              <div className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">Seu Desempenho</div>
+              <div className="text-5xl font-black text-gray-800">{sc.tot}<span className="text-xl text-gray-400"> / 100</span></div>
+              <Badge color={scBand.c}>{scBand.l}</Badge>
+            </div>
+            <div className="h-3 rounded-full bg-gray-100 overflow-hidden mb-3">
+              <div className="h-full rounded-full" style={{ width: `${sc.tot}%`, background: sc.tot >= 70 ? '#22c55e' : sc.tot >= 55 ? '#f59e0b' : '#ef4444' }} />
+            </div>
+            <div className="space-y-1.5 mb-3">
+              {[
+                { l: "Alimentação", v: sc.alim, m: 30 },
+                { l: "Proteína", v: sc.pr, m: 20 },
+                { l: "Treino", v: sc.tr, m: 20 },
+                { l: "Sono", v: sc.so, m: 15 },
+                { l: "Rotina", v: sc.ro, m: 10 },
+                { l: "Água", v: sc.ag, m: 5 },
+              ].map(s => (
+                <div key={s.l} className="flex items-center gap-2 text-xs">
+                  <span className="text-gray-500 w-20 text-right">{s.l}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-gray-700" style={{ width: `${(s.v / s.m) * 100}%` }} />
+                  </div>
+                  <span className="font-bold text-gray-500 w-8">{s.v}/{s.m}</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-600 leading-relaxed">
+              <p>🟢 <b>Ponto forte:</b> {trained ? 'treino feito' : 'rotina parcial'}. {totMacros.p >= 140 ? 'Proteína razoável.' : ''}</p>
+              <p>🟡 <b>Atenção:</b> {totMacros.k < 500 ? 'alimentação quase vazia' : totMacros.p < 140 ? 'proteína baixa' : 'feche o dia com jantar e água'}.</p>
+              <p>🔵 <b>Amanhã:</b> abrir com peso, garantir proteína no almoço.</p>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* ═══ BOTTOM NAV ═══ */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 shadow-lg">
+        <div className="max-w-lg mx-auto flex">
+          {[
+            { k: "hoje", i: "🔥", l: "Hoje" },
+            { k: "corpo", i: "📊", l: "Corpo" },
+            { k: "historico", i: "📅", l: "Histórico" },
+            { k: "ia", i: "🧠", l: "IA" },
+          ].map(t => (
+            <button key={t.k} onClick={() => setPage(t.k)}
+              className={`flex-1 flex flex-col items-center py-3 ${page === t.k ? 'text-emerald-600' : 'text-gray-400'}`}>
+              <span className="text-lg">{t.i}</span>
+              <span className="text-xs mt-0.5 font-semibold">{t.l}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══ SLEEP FORM ═══ */
+function SleepForm({ dt, data, onSave, onClose }) {
+  const [bed, setBed] = useState(data?.bed_time?.slice(0,5) || "00:00");
+  const [wake, setWake] = useState(data?.wake_time?.slice(0,5) || "07:00");
+  const [cpap, setCpap] = useState(data?.used_cpap ?? true);
+  const [cpapH, setCpapH] = useState(data?.cpap_hours || 0);
+  const [ahi, setAhi] = useState(data?.ahi || 0);
+  const [energy, setEnergy] = useState(data?.energy_score || 5);
+
+  const totalH = (() => {
+    const [bh, bm] = bed.split(':').map(Number);
+    const [wh, wm] = wake.split(':').map(Number);
+    let diff = (wh * 60 + wm) - (bh * 60 + bm);
+    if (diff <= 0) diff += 1440;
+    return +(diff / 60).toFixed(2);
+  })();
+
+  const save = async () => {
+    await sb.upsert("sleep_cpap", {
+      date: dt, bed_time: bed, wake_time: wake, total_hours: totalH,
+      used_cpap: cpap, cpap_hours: cpapH, ahi, energy_score: energy
+    });
+    onSave(); onClose();
+  };
+
+  return (
+    <div className="mt-3 space-y-2 fade-in">
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-gray-500">Dormiu às
+          <input type="time" value={bed} onChange={e => setBed(e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+        <label className="text-xs text-gray-500">Acordou às
+          <input type="time" value={wake} onChange={e => setWake(e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+      </div>
+      <div className="text-xs text-gray-500">Total calculado: <b>{totalH}h</b></div>
+      <div className="grid grid-cols-3 gap-2">
+        <label className="text-xs text-gray-500">CPAP (h)
+          <input type="number" step="0.1" value={cpapH} onChange={e => setCpapH(+e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+        <label className="text-xs text-gray-500">AHI
+          <input type="number" step="0.1" value={ahi} onChange={e => setAhi(+e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+        <label className="text-xs text-gray-500">Energia (0-10)
+          <input type="number" min="0" max="10" value={energy} onChange={e => setEnergy(+e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+      </div>
+      <button onClick={save} className="w-full py-2 bg-indigo-500 text-white rounded-xl font-bold text-sm">Salvar sono</button>
+    </div>
+  );
+}
+
+/* ═══ WORKOUT FORM ═══ */
+function WorkoutForm({ dt, data, onSave, onClose }) {
+  const types = ["Musculação","Caminhada","Corrida","Bike","Escada","Mobilidade","Outro"];
+  const splits = ["Superior","Inferior","Push","Pull","Full body","Outro"];
+  const [type, setType] = useState(data?.workout_type || "Musculação");
+  const [split, setSplit] = useState(data?.strength_split || "Superior");
+  const [dur, setDur] = useState(data?.duration_min || 0);
+  const [int_, setInt] = useState(data?.intensity || 6);
+
+  const save = async () => {
+    await sb.upsert("workout_logs", {
+      date: dt, workout_type: type, strength_split: type === "Musculação" ? split : null,
+      duration_min: dur || null, intensity: int_
+    });
+    onSave(); onClose();
+  };
+
+  return (
+    <div className="mt-3 space-y-2 fade-in">
+      <label className="text-xs text-gray-500">Tipo
+        <select value={type} onChange={e => setType(e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm">
+          {types.map(t => <option key={t}>{t}</option>)}
+        </select>
+      </label>
+      {type === "Musculação" && (
+        <label className="text-xs text-gray-500">Divisão
+          <select value={split} onChange={e => setSplit(e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm">
+            {splits.map(s => <option key={s}>{s}</option>)}
+          </select>
+        </label>
+      )}
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-xs text-gray-500">Duração (min)
+          <input type="number" value={dur} onChange={e => setDur(+e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+        <label className="text-xs text-gray-500">Intensidade (1-10)
+          <input type="number" min="1" max="10" value={int_} onChange={e => setInt(+e.target.value)} className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+        </label>
+      </div>
+      <button onClick={save} className="w-full py-2 bg-blue-500 text-white rounded-xl font-bold text-sm">Salvar treino</button>
+    </div>
+  );
+}
+
+/* ═══ MEAL FORM ═══ */
+function MealForm({ dt, mealType, foods, onSave }) {
+  const [search, setSearch] = useState("");
+  const [sel, setSel] = useState(null);
+  const [qty, setQty] = useState(100);
+
+  const filtered = foods.filter(f => {
+    const ctx = f.meal_contexts || [];
+    const matchCtx = ctx.length === 0 || ctx.includes(mealType);
+    const matchSearch = !search || f.name.toLowerCase().includes(search.toLowerCase());
+    return matchCtx && matchSearch;
+  }).slice(0, 15);
+
+  const save = async () => {
+    if (!sel) return;
+    const factor = qty / 100;
+    await sb.insert("meals", {
+      date: dt, meal_type: mealType, food_key: sel.food_key, quantity_g: qty,
+      portions: qty / (sel.default_portion_g || 100),
+      kcal: +(sel.kcal_per_100g * factor).toFixed(1),
+      protein_g: +(sel.protein_per_100g * factor).toFixed(1),
+      carbs_g: +(sel.carbs_per_100g * factor).toFixed(1),
+      fat_g: +(sel.fat_per_100g * factor).toFixed(1),
+    });
+    onSave();
+  };
+
+  const factor = sel ? qty / 100 : 0;
+
+  return (
+    <div className="pl-7 pb-3 fade-in">
+      <input type="text" value={search} onChange={e => { setSearch(e.target.value); setSel(null); }}
+        placeholder="Buscar alimento..." className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm mb-2" />
+      {!sel && (
+        <div className="max-h-40 overflow-y-auto rounded-xl border border-gray-100 mb-2">
+          {filtered.map(f => (
+            <button key={f.food_key} onClick={() => { setSel(f); setQty(f.default_portion_g || 100); setSearch(f.name); }}
+              className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 border-b border-gray-50 last:border-0">
+              <span className="font-medium text-gray-700">{f.name}</span>
+              <span className="text-xs text-gray-400 ml-2">{f.kcal_per_100g} kcal/100g · P{f.protein_per_100g}g</span>
+            </button>
+          ))}
+          {filtered.length === 0 && <div className="p-3 text-xs text-gray-400 text-center">Nenhum item encontrado</div>}
+        </div>
+      )}
+      {sel && (
+        <div className="space-y-2">
+          <div className="flex gap-2 items-end">
+            <label className="flex-1 text-xs text-gray-500">Quantidade (g)
+              <input type="number" value={qty} onChange={e => setQty(+e.target.value)}
+                className="w-full mt-1 px-2 py-1.5 rounded-lg border border-gray-200 text-sm" />
+            </label>
+            <span className="text-xs text-gray-400 pb-2">Porção: {sel.default_portion_g}g</span>
+          </div>
+          <div className="text-xs text-gray-500">
+            {Math.round(sel.kcal_per_100g * factor)} kcal · P{(sel.protein_per_100g * factor).toFixed(0)}g · C{(sel.carbs_per_100g * factor).toFixed(0)}g · G{(sel.fat_per_100g * factor).toFixed(0)}g
+          </div>
+          <button onClick={save} className="w-full py-2 bg-orange-500 text-white rounded-xl font-bold text-sm">Adicionar</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
