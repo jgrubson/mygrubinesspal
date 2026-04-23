@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as comp
 from pathlib import Path
 
 st.set_page_config(
@@ -26,4 +27,4 @@ html = Path("frontend.html").read_text(encoding="utf-8")
 html = html.replace("{{SUPABASE_URL}}", st.secrets["SUPABASE_URL"])
 html = html.replace("{{SUPABASE_KEY}}", st.secrets["SUPABASE_KEY"])
 
-st.html(html, height=4000)
+comp.html(html, height=4000, scrolling=True)
