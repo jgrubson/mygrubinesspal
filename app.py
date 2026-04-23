@@ -255,6 +255,26 @@ def safe_execute(fn):
         return False, str(e)
 
 
+
+
+ROUTINE_FALLBACK_ITEMS = [
+    {"item_key": "euthyrox", "name": "Euthyrox", "dosage": "25 mcg", "instruction": "Tomar ao acordar, sozinho, com água, em jejum.", "time_slot": "jejum", "sort_order": 10, "active": True},
+    {"item_key": "sertralina", "name": "Sertralina", "dosage": "200 mg", "instruction": "Tomar pela manhã.", "time_slot": "manha", "sort_order": 20, "active": True},
+    {"item_key": "b12", "name": "B12 NOW Methyl B-12", "dosage": "1000 mcg", "instruction": "Tomar no café da manhã.", "time_slot": "manha", "sort_order": 30, "active": True},
+    {"item_key": "creatina", "name": "Creatina", "dosage": "3–5 g", "instruction": "Uso diário.", "time_slot": "manha", "sort_order": 40, "active": True},
+    {"item_key": "whey", "name": "Whey", "dosage": "conforme uso", "instruction": "Ferramenta para bater proteína; não precisa marcar todos os dias.", "time_slot": "variavel", "sort_order": 45, "active": True},
+    {"item_key": "pantoprazol", "name": "Pantoprazol", "dosage": "40 mg", "instruction": "Tomar no meio do dia.", "time_slot": "almoco", "sort_order": 50, "active": True},
+    {"item_key": "equaliv_omega3", "name": "Equaliv Ultra Caps (ômega 3)", "dosage": "1 cápsula", "instruction": "Tomar 1 cápsula no almoço.", "time_slot": "almoco", "sort_order": 60, "active": True},
+    {"item_key": "rosucor_eze", "name": "Rosucor EZE / Plenance EZE", "dosage": "5/10 mg", "instruction": "Tomar no jantar.", "time_slot": "jantar", "sort_order": 70, "active": True},
+    {"item_key": "lipidil", "name": "Lipidil", "dosage": "160 mg", "instruction": "Tomar no jantar.", "time_slot": "jantar", "sort_order": 80, "active": True},
+    {"item_key": "equaliv_omega3_jantar", "name": "Equaliv Ultra Caps (ômega 3)", "dosage": "2 cápsulas", "instruction": "Tomar 2 cápsulas no jantar.", "time_slot": "jantar", "sort_order": 90, "active": True},
+    {"item_key": "dprev", "name": "DPrev", "dosage": "5000 UI", "instruction": "Tomar no jantar.", "time_slot": "jantar", "sort_order": 100, "active": True},
+    {"item_key": "trazodona", "name": "Trazodona / Donaren", "dosage": "50 mg", "instruction": "Tomar à noite, após lanche leve.", "time_slot": "noite", "sort_order": 110, "active": True},
+    {"item_key": "magnesio", "name": "Magnésio quelato", "dosage": "2 cápsulas", "instruction": "Tomar à noite, longe do Euthyrox.", "time_slot": "noite", "sort_order": 120, "active": True},
+    {"item_key": "rivotril", "name": "Rivotril", "dosage": "se necessário", "instruction": "Uso eventual em gotas, quando necessário.", "time_slot": "variavel", "sort_order": 130, "active": True},
+    {"item_key": "treino", "name": "Treino", "dosage": None, "instruction": "Marque quando o treino do dia tiver sido feito.", "time_slot": "variavel", "sort_order": 140, "active": True},
+    {"item_key": "cpap", "name": "CPAP", "dosage": None, "instruction": "Marque quando tiver usado o CPAP na noite anterior.", "time_slot": "variavel", "sort_order": 150, "active": True},
+]
 DEFAULT_GOALS = {
     "weight": {"metric": "weight", "target_value": 99.9, "label": "meta intermediária"},
     "weight_long_term": {"metric": "weight_long_term", "target_value": 90.0, "label": "meta longa"},
