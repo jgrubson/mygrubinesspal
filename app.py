@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 from pathlib import Path
 
 st.set_page_config(
@@ -17,6 +18,7 @@ st.markdown(
     .stApp > header { display: none !important; }
     .block-container { padding: 0 !important; max-width: 100% !important; }
     [data-testid="stVerticalBlock"] { gap: 0 !important; }
+    iframe { border: none !important; }
     </style>""",
     unsafe_allow_html=True,
 )
@@ -25,4 +27,4 @@ html = Path("frontend.html").read_text(encoding="utf-8")
 html = html.replace("{{SUPABASE_URL}}", st.secrets["SUPABASE_URL"])
 html = html.replace("{{SUPABASE_KEY}}", st.secrets["SUPABASE_KEY"])
 
-st.components.html(html, height=4000, scrolling=True)
+components.html(html, height=4000, scrolling=True)
